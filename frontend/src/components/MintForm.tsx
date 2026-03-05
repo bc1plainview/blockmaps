@@ -1,9 +1,10 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useWalletConnect, SupportedWallets } from '@btc-vision/walletconnect';
 import { SVGPreview } from './SVGPreview.js';
 import { ExplorerLinks } from './ExplorerLinks.js';
 import { useBlockData } from '../hooks/useBlockData.js';
 import { useMint, useIsMinted } from '../hooks/useBlockMaps.js';
+import { useAudio } from '../hooks/useAudio.js';
 import { CONTRACT_ADDRESS_HEX } from '../lib/constants.js';
 import type { BlockData } from '../types/index.js';
 
@@ -42,18 +43,18 @@ function StatCard({ label, value }: StatCardProps): React.ReactElement {
     return (
         <div
             style={{
-                background: 'var(--bg-surface)',
-                border: '1px solid var(--border-glass)',
-                borderRadius: 'var(--radius-sm)',
-                padding: '12px',
+                background: 'var(--bg-void)',
+                border: '2px solid var(--border-glass)',
+                padding: '10px',
                 flex: 1,
                 minWidth: '120px',
+                boxShadow: 'var(--pixel-shadow-dark)',
             }}
         >
-            <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '4px' }}>
+            <div style={{ fontSize: '7px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '6px', fontFamily: "'Press Start 2P', cursive" }}>
                 {label}
             </div>
-            <div style={{ fontSize: '14px', color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums', wordBreak: 'break-all' }}>
+            <div style={{ fontSize: '9px', color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums', wordBreak: 'break-all', fontFamily: "'Press Start 2P', cursive" }}>
                 {value}
             </div>
         </div>
@@ -66,14 +67,32 @@ export function MintForm(): React.ReactElement {
     const { loading: fetchingBlock, error: fetchError, fetchBlock, reset } = useBlockData();
     const { isMinted, checkingMinted, checkMinted } = useIsMinted();
     const { mintStatus, mintError, mintTxId, mint } = useMint();
+    const { playClick, playMint, playSuccess, playError } = useAudio();
 
     const [inputValue, setInputValue] = useState('');
     const [checkedBlock, setCheckedBlock] = useState<BlockData | null>(null);
+
+    // Track previous mintStatus to detect transitions
+    const prevMintStatus = useRef(mintStatus);
+
+    useEffect(() => {
+        const prev = prevMintStatus.current;
+        prevMintStatus.current = mintStatus;
+
+        if (prev !== mintStatus) {
+            if (mintStatus === 'success') {
+                playSuccess();
+            } else if (mintStatus === 'error') {
+                playError();
+            }
+        }
+    }, [mintStatus, playSuccess, playError]);
 
     const handleCheck = useCallback(async (): Promise<void> => {
         const heightStr = inputValue.trim();
         if (!heightStr || !/^\d+$/.test(heightStr)) return;
 
+        playClick();
         reset();
         setCheckedBlock(null);
 
@@ -83,10 +102,11 @@ export function MintForm(): React.ReactElement {
             setCheckedBlock(data);
             await checkMinted(height);
         }
-    }, [inputValue, fetchBlock, checkMinted, reset]);
+    }, [inputValue, fetchBlock, checkMinted, reset, playClick]);
 
     const handleMint = useCallback(async (): Promise<void> => {
         if (!checkedBlock) return;
+        playMint();
         // Pass all 9 params to new contract signature
         await mint(
             checkedBlock.blockHeight,
@@ -99,11 +119,12 @@ export function MintForm(): React.ReactElement {
             checkedBlock.totalFees,
             checkedBlock.blockReward,
         );
-    }, [checkedBlock, mint]);
+    }, [checkedBlock, mint, playMint]);
 
     const handleConnect = useCallback((): void => {
+        playClick();
         connectToWallet(SupportedWallets.OP_WALLET);
-    }, [connectToWallet]);
+    }, [connectToWallet, playClick]);
 
     const isBusy = fetchingBlock || checkingMinted || mintStatus === 'simulating' || mintStatus === 'pending';
 
@@ -138,7 +159,7 @@ export function MintForm(): React.ReactElement {
                         disabled={isBusy || !inputValue.trim()}
                         aria-label="Check block"
                     >
-                        {fetchingBlock ? 'Fetching...' : 'Check Block'}
+                        {fetchingBlock ? 'Fetching...' : 'Check'}
                     </button>
                 </div>
             </div>
@@ -154,8 +175,8 @@ export function MintForm(): React.ReactElement {
             {checkedBlock && (
                 <div className="glass-card fade-in">
                     <div style={{ display: 'flex', gap: 'var(--spacing-lg)', flexWrap: 'wrap' }}>
-                        {/* SVG preview */}
-                        <div style={{ flexShrink: 0 }}>
+                        {/* SVG preview with pixel border */}
+                        <div style={{ flexShrink: 0, border: '2px solid var(--border-glass)', imageRendering: 'pixelated' }}>
                             <SVGPreview
                                 blockHeight={checkedBlock.blockHeight}
                                 hashHex={checkedBlock.blockHash}
@@ -168,13 +189,15 @@ export function MintForm(): React.ReactElement {
                         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '12px', minWidth: '200px' }}>
                             <h2
                                 style={{
-                                    fontSize: '20px',
+                                    fontSize: '14px',
                                     color: 'var(--accent)',
                                     margin: 0,
                                     fontVariantNumeric: 'tabular-nums',
+                                    fontFamily: "'Press Start 2P', cursive",
+                                    textShadow: '2px 2px 0 rgba(247,147,26,0.3)',
                                 }}
                             >
-                                Block #{checkedBlock.blockHeight.toLocaleString()}
+                                BLK #{checkedBlock.blockHeight.toLocaleString()}
                             </h2>
 
                             {/* Already minted status */}
@@ -183,33 +206,34 @@ export function MintForm(): React.ReactElement {
                                     style={{
                                         display: 'inline-flex',
                                         alignItems: 'center',
-                                        gap: '6px',
-                                        fontSize: '12px',
+                                        gap: '8px',
+                                        fontSize: '8px',
                                         color: isMinted ? 'var(--text-muted)' : 'var(--green)',
+                                        fontFamily: "'Press Start 2P', cursive",
                                     }}
                                 >
                                     <span
                                         className={`status-dot ${isMinted ? 'status-dot-red' : 'status-dot-green'}`}
                                     />
-                                    {isMinted ? 'Already minted' : 'Available to mint'}
+                                    {isMinted ? 'Already minted' : 'Available'}
                                 </div>
                             )}
 
-                            <div className="code-text" style={{ fontSize: '11px', wordBreak: 'break-all', lineHeight: 1.4 }}>
+                            <div className="code-text" style={{ fontSize: '7px', wordBreak: 'break-all', lineHeight: 1.6 }}>
                                 {checkedBlock.blockHash}
                             </div>
 
                             {/* Stats row */}
-                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                                <StatCard label="Transactions" value={checkedBlock.txCount.toLocaleString()} />
-                                <StatCard label="Difficulty" value={formatDifficulty(checkedBlock.difficulty)} />
-                                <StatCard label="Timestamp" value={formatTimestamp(checkedBlock.timestamp)} />
+                            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                                <StatCard label="Txns" value={checkedBlock.txCount.toLocaleString()} />
+                                <StatCard label="Diff" value={formatDifficulty(checkedBlock.difficulty)} />
+                                <StatCard label="Time" value={formatTimestamp(checkedBlock.timestamp)} />
                             </div>
 
                             {/* New fields row */}
-                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                                 <StatCard label="Size" value={`${(Number(checkedBlock.blockSize) / 1000).toFixed(1)} kB`} />
-                                <StatCard label="Total Fees" value={satsToBtcDisplay(checkedBlock.totalFees)} />
+                                <StatCard label="Fees" value={satsToBtcDisplay(checkedBlock.totalFees)} />
                                 <StatCard label="Reward" value={satsToBtcDisplay(checkedBlock.blockReward)} />
                             </div>
                         </div>
@@ -255,10 +279,10 @@ export function MintForm(): React.ReactElement {
                         {/* Success with txid */}
                         {mintStatus === 'success' && mintTxId && (
                             <div className="alert alert-success">
-                                <div style={{ marginBottom: '8px', fontWeight: 700 }}>
+                                <div style={{ marginBottom: '8px', fontSize: '9px' }}>
                                     Block #{checkedBlock.blockHeight.toLocaleString()} minted
                                 </div>
-                                <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '8px', fontVariantNumeric: 'tabular-nums' }}>
+                                <div style={{ fontSize: '7px', color: 'var(--text-secondary)', marginBottom: '10px', fontVariantNumeric: 'tabular-nums', wordBreak: 'break-all' }}>
                                     TXID: {mintTxId}
                                 </div>
                                 <ExplorerLinks txid={mintTxId} contractAddress={CONTRACT_ADDRESS_HEX} />

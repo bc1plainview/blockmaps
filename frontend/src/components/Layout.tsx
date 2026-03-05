@@ -2,6 +2,8 @@ import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { WalletButton } from './WalletButton.js';
 import { SearchBar } from './SearchBar.js';
+import { MuteToggle } from './MuteToggle.js';
+import { CRTOverlay } from './CRTOverlay.js';
 
 interface LayoutProps {
     children: React.ReactNode;
@@ -18,15 +20,16 @@ function NavLink({ to, children, isActive }: NavLinkProps): React.ReactElement {
         <Link
             to={to}
             style={{
-                fontSize: '13px',
-                fontWeight: 700,
+                fontSize: '9px',
+                fontWeight: 400,
                 textTransform: 'uppercase',
                 letterSpacing: '0.06em',
                 color: isActive ? 'var(--accent)' : 'var(--text-secondary)',
                 textDecoration: 'none',
                 padding: '4px 0',
                 borderBottom: isActive ? '2px solid var(--accent)' : '2px solid transparent',
-                transition: 'color 200ms ease, border-color 200ms ease',
+                transition: 'color 80ms step-start, border-color 80ms step-start',
+                fontFamily: "'Press Start 2P', cursive",
             }}
         >
             {children}
@@ -50,13 +53,13 @@ export function Layout({ children }: LayoutProps): React.ReactElement {
                     position: 'sticky',
                     top: 0,
                     zIndex: 100,
-                    background: 'rgba(10, 10, 26, 0.9)',
-                    backdropFilter: 'blur(20px)',
-                    WebkitBackdropFilter: 'blur(20px)',
-                    borderBottom: '1px solid var(--border-glass)',
+                    background: 'rgba(5, 5, 16, 0.96)',
+                    borderBottom: '2px solid var(--border-glass)',
+                    boxShadow: '0 2px 0 rgba(247,147,26,0.1)',
                     height: '60px',
                     display: 'flex',
                     alignItems: 'center',
+                    imageRendering: 'pixelated',
                 }}
             >
                 <div
@@ -76,18 +79,20 @@ export function Layout({ children }: LayoutProps): React.ReactElement {
                             textDecoration: 'none',
                             display: 'flex',
                             alignItems: 'center',
-                            gap: '10px',
+                            gap: '8px',
                             flexShrink: 0,
                         }}
                     >
                         <span
                             className="header-logo"
                             style={{
-                                fontSize: '18px',
-                                fontWeight: 700,
+                                fontSize: '12px',
+                                fontWeight: 400,
                                 color: 'var(--accent)',
-                                letterSpacing: '-0.02em',
+                                letterSpacing: '0.02em',
                                 fontVariantNumeric: 'tabular-nums',
+                                fontFamily: "'Press Start 2P', cursive",
+                                textShadow: '2px 2px 0 rgba(247,147,26,0.3)',
                             }}
                         >
                             BlockMaps
@@ -104,9 +109,10 @@ export function Layout({ children }: LayoutProps): React.ReactElement {
                         <NavLink to="/my" isActive={location.pathname === '/my'}>My Maps</NavLink>
                     </nav>
 
-                    {/* Search bar + Wallet */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
+                    {/* Search bar + Mute + Wallet */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
                         <SearchBar />
+                        <MuteToggle />
                         <WalletButton />
                     </div>
                 </div>
@@ -120,17 +126,23 @@ export function Layout({ children }: LayoutProps): React.ReactElement {
             {/* Footer */}
             <footer
                 style={{
-                    borderTop: '1px solid var(--border-glass)',
-                    padding: '24px var(--spacing-md)',
+                    borderTop: '2px solid var(--border-glass)',
+                    boxShadow: '0 -2px 0 rgba(247,147,26,0.05)',
+                    padding: '20px var(--spacing-md)',
                     textAlign: 'center',
                     color: 'var(--text-muted)',
-                    fontSize: '12px',
+                    fontSize: '8px',
                     position: 'relative',
                     zIndex: 1,
+                    fontFamily: "'Press Start 2P', cursive",
+                    letterSpacing: '0.04em',
                 }}
             >
                 <p>BlockMaps &mdash; On-chain Bitcoin block NFTs on OPNet Testnet</p>
             </footer>
+
+            {/* CRT overlay — last child, pointer-events: none */}
+            <CRTOverlay />
         </>
     );
 }

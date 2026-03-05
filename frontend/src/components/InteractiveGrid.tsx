@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useRef } from 'react';
+import { useAudio } from '../hooks/useAudio.js';
 
 const PALETTE: readonly string[] = [
     '#f7931a', '#ffcc00', '#ff6b00', '#ffa940',
@@ -46,6 +47,7 @@ interface InteractiveGridProps {
  * SVG interactive grid where each cell = 1 (or N) transaction(s).
  * Uses same color palette as on-chain SVG generator.
  * Hover shows tooltip, click fires onCellClick.
+ * Pixel aesthetic: square cells (rx=0), stepped animations, chiptune audio.
  */
 export function InteractiveGrid({
     blockHeight,
@@ -57,6 +59,7 @@ export function InteractiveGrid({
 }: InteractiveGridProps): React.ReactElement {
     const [tooltip, setTooltip] = useState<TooltipData | null>(null);
     const svgRef = useRef<SVGSVGElement | null>(null);
+    const { playHover, playClick } = useAudio();
 
     // Grid size mirrors on-chain algorithm
     const GRID_CELLS = 256; // max 16x16
@@ -66,14 +69,14 @@ export function InteractiveGrid({
 
     const hashBytes = hashToBytes(hashHex);
 
-    // Cell layout
+    // Cell layout — zero gap for pixel-tight grid
     const viewBox = 320;
-    const gridArea = 280;
-    const gap = 2;
+    const gridArea = 288;
+    const gap = 1; // pixel-tight: 1px gap
     const totalGap = (gridDim - 1) * gap;
     const cellSize = Math.floor((gridArea - totalGap) / gridDim);
-    const offsetX = 20;
-    const offsetY = 20;
+    const offsetX = 16;
+    const offsetY = 16;
 
     const handleCellEnter = useCallback((
         e: React.MouseEvent<SVGRectElement>,
@@ -91,7 +94,8 @@ export function InteractiveGrid({
             txStart,
             txEnd,
         });
-    }, []);
+        playHover();
+    }, [playHover]);
 
     const handleCellLeave = useCallback((): void => {
         setTooltip(null);
@@ -100,7 +104,8 @@ export function InteractiveGrid({
     const handleCellClick = useCallback((cellIndex: number): void => {
         onCellClick(cellIndex);
         setTooltip(null);
-    }, [onCellClick]);
+        playClick();
+    }, [onCellClick, playClick]);
 
     const cells: React.ReactElement[] = [];
 
@@ -109,7 +114,7 @@ export function InteractiveGrid({
             const cellIndex = row * gridDim + col;
             const x = offsetX + col * (cellSize + gap);
             const y = offsetY + row * (cellSize + gap);
-            const rx = 2;
+            // rx=0 for pixel aesthetic
             const isSelected = selectedCell === cellIndex;
 
             if (cellIndex < filledCells) {
@@ -130,17 +135,17 @@ export function InteractiveGrid({
                         y={y}
                         width={cellSize}
                         height={cellSize}
-                        rx={rx}
+                        rx={0}
                         fill={color}
                         opacity={isSelected ? 1 : opacity}
                         stroke={isSelected ? '#f7931a' : 'none'}
-                        strokeWidth={isSelected ? 1.5 : 0}
+                        strokeWidth={isSelected ? 2 : 0}
                         className="grid-cell"
                         style={{
                             filter: isSelected
-                                ? 'drop-shadow(0 0 4px rgba(247,147,26,0.8)) drop-shadow(0 0 8px rgba(247,147,26,0.4))'
+                                ? 'drop-shadow(2px 2px 0 rgba(247,147,26,1)) drop-shadow(4px 4px 0 rgba(247,147,26,0.5))'
                                 : undefined,
-                            animation: `cellReveal 200ms ease ${Math.min(cellIndex * 3, 400)}ms both`,
+                            animation: `cellReveal 200ms steps(4) ${Math.min(cellIndex * 3, 400)}ms both`,
                         }}
                         onMouseEnter={(e) => handleCellEnter(e, cellIndex, txStart, txEnd, txid)}
                         onMouseLeave={handleCellLeave}
@@ -164,9 +169,9 @@ export function InteractiveGrid({
                         y={y}
                         width={cellSize}
                         height={cellSize}
-                        rx={rx}
+                        rx={0}
                         fill="#ffffff"
-                        opacity="0.025"
+                        opacity="0.02"
                     />,
                 );
             }
@@ -179,61 +184,73 @@ export function InteractiveGrid({
                 ref={svgRef}
                 viewBox={`0 0 ${viewBox} ${viewBox}`}
                 className="interactive-grid"
-                style={{ display: 'block', width: '100%', height: 'auto' }}
+                style={{
+                    display: 'block',
+                    width: '100%',
+                    height: 'auto',
+                    imageRendering: 'pixelated',
+                }}
                 aria-label={`Interactive block grid for block #${blockHeight.toString()}. ${filledCells} transaction parcels.`}
                 role="img"
             >
-                <rect width={viewBox} height={viewBox} fill="#050510" />
+                {/* Dark pixel background */}
+                <rect width={viewBox} height={viewBox} fill="#020208" />
+
+                {/* Subtle pixel dot grid */}
+                <pattern id="pixelDots" x="0" y="0" width="16" height="16" patternUnits="userSpaceOnUse">
+                    <rect x="0" y="0" width="1" height="1" fill="#ffffff" opacity="0.015" />
+                </pattern>
+                <rect width={viewBox} height={viewBox} fill="url(#pixelDots)" />
 
                 {/* Block height label */}
                 <text
                     x={viewBox / 2}
-                    y={14}
+                    y={12}
                     textAnchor="middle"
                     fill="#f7931a"
-                    fontSize={11}
-                    fontFamily="monospace"
+                    fontSize={8}
+                    fontFamily="'Press Start 2P', monospace"
                     style={{ fontVariantNumeric: 'tabular-nums' }}
                 >
-                    BLOCK #{blockHeight.toString()}
+                    BLK #{blockHeight.toString()}
                 </text>
 
                 <g>{cells}</g>
 
                 {/* Footer labels */}
-                <text x={20} y={viewBox - 6} fill="#555" fontSize={9} fontFamily="monospace">
-                    {txCount.toLocaleString()} txns
+                <text x={offsetX} y={viewBox - 4} fill="#333355" fontSize={7} fontFamily="'Press Start 2P', monospace">
+                    {txCount.toLocaleString()} TXS
                 </text>
-                <text x={viewBox - 20} y={viewBox - 6} textAnchor="end" fill="#555" fontSize={9} fontFamily="monospace">
-                    {hashHex.substring(0, 8)}...
+                <text x={viewBox - offsetX} y={viewBox - 4} textAnchor="end" fill="#333355" fontSize={7} fontFamily="'Press Start 2P', monospace">
+                    {hashHex.substring(0, 8)}
                 </text>
             </svg>
 
-            {/* Tooltip */}
+            {/* Pixel tooltip */}
             {tooltip && (
                 <div
                     className="grid-tooltip"
                     style={{
-                        left: Math.min(tooltip.x, window.innerWidth - 300),
+                        left: Math.min(tooltip.x, window.innerWidth - 260),
                         top: Math.max(8, tooltip.y - 8),
                     }}
                     aria-hidden="true"
                 >
-                    <div style={{ color: 'var(--accent)', fontWeight: 700, marginBottom: 4 }}>
-                        Parcel {tooltip.cellIndex + 1}
+                    <div style={{ color: 'var(--accent)', marginBottom: 6, fontSize: 9 }}>
+                        PARCEL {tooltip.cellIndex + 1}
                     </div>
                     {txsPerCell > 1 && (
-                        <div style={{ color: 'var(--text-muted)', fontSize: 10, marginBottom: 4 }}>
-                            Txns {tooltip.txStart + 1}&ndash;{tooltip.txEnd + 1}
+                        <div style={{ color: 'var(--text-muted)', fontSize: 7, marginBottom: 4 }}>
+                            TX {tooltip.txStart + 1}&ndash;{tooltip.txEnd + 1}
                         </div>
                     )}
                     {tooltip.txid && (
-                        <div style={{ color: 'var(--text-secondary)', wordBreak: 'break-all' }}>
-                            {tooltip.txid.slice(0, 16)}...
+                        <div style={{ color: 'var(--text-secondary)', wordBreak: 'break-all', fontSize: 7 }}>
+                            {tooltip.txid.slice(0, 14)}...
                         </div>
                     )}
                     {!tooltip.txid && (
-                        <div style={{ color: 'var(--text-muted)' }}>Click to load tx detail</div>
+                        <div style={{ color: 'var(--text-muted)', fontSize: 7 }}>Click to load tx</div>
                     )}
                 </div>
             )}

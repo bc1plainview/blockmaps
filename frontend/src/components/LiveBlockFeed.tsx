@@ -1,6 +1,7 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useLiveBlocks } from '../hooks/useLiveBlocks.js';
+import { useAudio } from '../hooks/useAudio.js';
 import type { MempoolBlockSummary } from '../types/index.js';
 
 const MINI_GRID_DIM = 4;
@@ -41,7 +42,7 @@ function MiniGrid({ blockHash }: { blockHash: string }): React.ReactElement {
                 y={y}
                 width={MINI_CELL}
                 height={MINI_CELL}
-                rx={1}
+                rx={0}
                 fill={color}
                 opacity={opacity}
             />,
@@ -54,9 +55,10 @@ function MiniGrid({ blockHash }: { blockHash: string }): React.ReactElement {
             width={MINI_SIZE}
             height={MINI_SIZE}
             className="live-feed-mini-grid"
+            style={{ imageRendering: 'pixelated' }}
             aria-hidden="true"
         >
-            <rect width={MINI_SIZE} height={MINI_SIZE} fill="#050510" />
+            <rect width={MINI_SIZE} height={MINI_SIZE} fill="#020208" />
             {cells}
         </svg>
     );
@@ -66,12 +68,12 @@ function timeAgo(ts: number): string {
     const diffMs = Date.now() - ts * 1000;
     const diffMin = Math.floor(diffMs / 60_000);
     if (diffMin < 1) return 'just now';
-    if (diffMin === 1) return '1 min ago';
-    if (diffMin < 60) return `${diffMin} min ago`;
+    if (diffMin === 1) return '1 min';
+    if (diffMin < 60) return `${diffMin} min`;
     const diffH = Math.floor(diffMin / 60);
-    if (diffH === 1) return '1 hr ago';
-    if (diffH < 24) return `${diffH} hrs ago`;
-    return `${Math.floor(diffH / 24)}d ago`;
+    if (diffH === 1) return '1 hr';
+    if (diffH < 24) return `${diffH} hr`;
+    return `${Math.floor(diffH / 24)}d`;
 }
 
 function formatFees(block: MempoolBlockSummary): string {
@@ -87,16 +89,24 @@ interface BlockCardProps {
 }
 
 function BlockCard({ block, onClick }: BlockCardProps): React.ReactElement {
+    const { playHover, playClick } = useAudio();
+
+    const handleClick = useCallback((): void => {
+        playClick();
+        onClick(block.height);
+    }, [block.height, onClick, playClick]);
+
     return (
         <div
-            className="live-feed-card"
-            onClick={() => onClick(block.height)}
+            className="live-feed-card slide-up"
+            onClick={handleClick}
+            onMouseEnter={playHover}
             role="button"
             tabIndex={0}
             onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
                     e.preventDefault();
-                    onClick(block.height);
+                    handleClick();
                 }
             }}
             aria-label={`Navigate to block ${block.height}`}
@@ -104,29 +114,29 @@ function BlockCard({ block, onClick }: BlockCardProps): React.ReactElement {
             <MiniGrid blockHash={block.id} />
 
             <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, marginBottom: 4 }}>
-                    <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--accent)', fontVariantNumeric: 'tabular-nums' }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
+                    <span style={{ fontSize: 10, color: 'var(--accent)', fontVariantNumeric: 'tabular-nums', fontFamily: "'Press Start 2P', cursive", textShadow: '1px 1px 0 rgba(247,147,26,0.3)' }}>
                         #{block.height.toLocaleString()}
                     </span>
-                    <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>
+                    <span style={{ fontSize: 7, color: 'var(--text-muted)', flexShrink: 0, fontFamily: "'Press Start 2P', cursive" }}>
                         {timeAgo(block.timestamp)}
                     </span>
                 </div>
 
-                <div style={{ fontSize: 11, color: 'var(--text-secondary)', fontVariantNumeric: 'tabular-nums', marginBottom: 4 }}>
+                <div style={{ fontSize: 7, color: 'var(--text-secondary)', fontVariantNumeric: 'tabular-nums', marginBottom: 4, fontFamily: "'Press Start 2P', cursive" }}>
                     {block.id.slice(0, 8)}...{block.id.slice(-4)}
                 </div>
 
-                <div style={{ display: 'flex', gap: 12, fontSize: 11, color: 'var(--text-muted)' }}>
+                <div style={{ display: 'flex', gap: 10, fontSize: 7, color: 'var(--text-muted)', fontFamily: "'Press Start 2P', cursive" }}>
                     <span style={{ fontVariantNumeric: 'tabular-nums' }}>
-                        {block.tx_count.toLocaleString()} txns
+                        {block.tx_count.toLocaleString()} txs
                     </span>
                     <span style={{ fontVariantNumeric: 'tabular-nums' }}>
                         {formatFees(block)}
                     </span>
                     {block.extras?.medianFee !== undefined && (
                         <span style={{ fontVariantNumeric: 'tabular-nums' }}>
-                            {block.extras.medianFee.toFixed(1)} sat/vB
+                            {block.extras.medianFee.toFixed(1)} s/vB
                         </span>
                     )}
                 </div>
@@ -138,7 +148,17 @@ function BlockCard({ block, onClick }: BlockCardProps): React.ReactElement {
 export function LiveBlockFeed(): React.ReactElement {
     const { blocks, loading, error, lastUpdated, refresh } = useLiveBlocks();
     const navigate = useNavigate();
+    const { playNewBlock } = useAudio();
     const [nowMs, setNowMs] = useState<number>(0);
+    const prevBlockCountRef = useRef(0);
+
+    // Play subtle blip when a new block appears
+    useEffect(() => {
+        if (blocks.length > prevBlockCountRef.current && prevBlockCountRef.current > 0) {
+            playNewBlock();
+        }
+        prevBlockCountRef.current = blocks.length;
+    }, [blocks.length, playNewBlock]);
 
     // Update "now" every 10s so we can compute time-ago without calling Date.now() in render
     useEffect((): (() => void) => {
@@ -166,13 +186,13 @@ export function LiveBlockFeed(): React.ReactElement {
     return (
         <div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                <div style={{ fontSize: 8, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: "'Press Start 2P', cursive" }}>
                     Latest Blocks
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     {secondsAgoLabel !== null && (
-                        <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
-                            Updated {secondsAgoLabel}
+                        <span style={{ fontSize: 7, color: 'var(--text-muted)', fontFamily: "'Press Start 2P', cursive" }}>
+                            {secondsAgoLabel}
                         </span>
                     )}
                     <button
@@ -182,7 +202,7 @@ export function LiveBlockFeed(): React.ReactElement {
                         disabled={loading}
                         aria-label="Refresh block feed"
                     >
-                        {loading ? 'Loading...' : 'Refresh'}
+                        {loading ? '...' : 'Refresh'}
                     </button>
                 </div>
             </div>
@@ -190,9 +210,9 @@ export function LiveBlockFeed(): React.ReactElement {
             {error && <div className="alert alert-error" style={{ marginBottom: 12 }}>{error}</div>}
 
             {loading && blocks.length === 0 && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     {Array.from({ length: 5 }).map((_, i) => (
-                        <div key={i} className="skeleton" style={{ height: 72, borderRadius: 8 }} />
+                        <div key={i} className="skeleton" style={{ height: 72 }} />
                     ))}
                 </div>
             )}

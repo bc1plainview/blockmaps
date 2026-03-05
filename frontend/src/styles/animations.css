@@ -1,10 +1,10 @@
-/* Horizon gradient animation */
+/* Horizon gradient animation — stepped */
 @keyframes horizonShift {
     0% { background-position: 0% 50%; }
     100% { background-position: 200% 50%; }
 }
 
-/* Glow pulse */
+/* Glow pulse — stepped */
 @keyframes glowPulse {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.6; }
@@ -22,11 +22,11 @@
     100% { transform: translateX(100%); }
 }
 
-/* Scroll reveal */
+/* Scroll reveal — pixel stepped */
 @keyframes fadeInUp {
     from {
         opacity: 0;
-        transform: translateY(24px);
+        transform: translateY(16px);
     }
     to {
         opacity: 1;
@@ -34,28 +34,26 @@
     }
 }
 
-/* Fade in */
+/* Fade in — 4 discrete opacity steps */
 @keyframes fadeIn {
-    from {
-        opacity: 0;
-        transform: translateY(8px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
+    0%   { opacity: 0;    transform: translateY(8px); }
+    25%  { opacity: 0.25; transform: translateY(6px); }
+    50%  { opacity: 0.5;  transform: translateY(4px); }
+    75%  { opacity: 0.75; transform: translateY(2px); }
+    100% { opacity: 1;    transform: translateY(0); }
 }
 
-/* Slide up for live feed items */
+/* Slide up — 8 discrete translate steps */
 @keyframes slideUp {
-    from {
-        opacity: 0;
-        transform: translateY(20px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
+    0%    { opacity: 0;    transform: translateY(20px); }
+    12.5% { opacity: 0.15; transform: translateY(17px); }
+    25%   { opacity: 0.3;  transform: translateY(15px); }
+    37.5% { opacity: 0.45; transform: translateY(12px); }
+    50%   { opacity: 0.6;  transform: translateY(10px); }
+    62.5% { opacity: 0.75; transform: translateY(7px); }
+    75%   { opacity: 0.9;  transform: translateY(5px); }
+    87.5% { opacity: 0.95; transform: translateY(2px); }
+    100%  { opacity: 1;    transform: translateY(0); }
 }
 
 /* Panel slide in from right */
@@ -70,16 +68,34 @@
     }
 }
 
-/* Staggered cell reveal */
+/* Staggered cell reveal — 4 scale steps */
 @keyframes cellReveal {
-    from {
-        opacity: 0;
-        transform: scale(0.5);
+    0%   { opacity: 0;    transform: scale(0.25); }
+    25%  { opacity: 0.4;  transform: scale(0.5); }
+    50%  { opacity: 0.7;  transform: scale(0.75); }
+    75%  { opacity: 0.9;  transform: scale(0.9); }
+    100% { opacity: 1;    transform: scale(1); }
+}
+
+/* Pixel glow pulse — pulsing stepped box-shadow */
+@keyframes pixelGlow {
+    0%, 100% {
+        box-shadow:
+            2px 2px 0 var(--accent),
+            4px 4px 0 rgba(247,147,26,0.4);
     }
-    to {
-        opacity: 1;
-        transform: scale(1);
+    50% {
+        box-shadow:
+            2px 2px 0 var(--accent),
+            4px 4px 0 var(--accent-50),
+            0 0 16px var(--accent-20);
     }
+}
+
+/* CRT scanline scroll */
+@keyframes scanlineScroll {
+    0% { background-position: 0 0; }
+    100% { background-position: 0 100%; }
 }
 
 /* Pulse glow for selected grid cell */
@@ -110,8 +126,8 @@
 /* Reveal classes */
 .reveal-hidden {
     opacity: 0;
-    transform: translateY(30px);
-    transition: opacity 600ms ease, transform 600ms ease;
+    transform: translateY(16px);
+    transition: opacity 400ms steps(4), transform 400ms steps(8);
 }
 
 .reveal-visible {
@@ -127,17 +143,17 @@
 
 /* Fade in on mount */
 .fade-in {
-    animation: fadeInUp 400ms ease forwards;
+    animation: fadeIn 320ms steps(4) forwards;
 }
 
 /* Slide up on mount */
 .slide-up {
-    animation: slideUp 350ms ease both;
+    animation: slideUp 280ms steps(8) both;
 }
 
 /* Page enter */
 .page-enter {
-    animation: fadeIn 250ms ease both;
+    animation: fadeIn 200ms steps(4) both;
 }
 
 /* Neon heading glow */

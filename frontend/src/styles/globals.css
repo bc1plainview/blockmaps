@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
 @import './animations.css';
 
 /* CSS Custom Properties */
@@ -8,7 +8,7 @@
     --bg-deep: #0a0a1a;
     --bg-surface: #0d0d22;
     --bg-elevated: #12122e;
-    --bg-card: rgba(13, 13, 34, 0.85);
+    --bg-card: #0d0d22;
 
     /* Text */
     --text-primary: #e8e8f0;
@@ -51,11 +51,18 @@
     --spacing-xl: 40px;
     --spacing-2xl: 64px;
 
-    /* Border radius */
-    --radius-sm: 4px;
-    --radius-md: 8px;
-    --radius-lg: 16px;
-    --radius-xl: 24px;
+    /* Border radius — zero for pixel aesthetic */
+    --radius-sm: 0px;
+    --radius-md: 0px;
+    --radius-lg: 0px;
+    --radius-xl: 0px;
+
+    /* Pixel design tokens */
+    --pixel-border: 2px solid var(--accent);
+    --pixel-shadow: 2px 2px 0 rgba(247, 147, 26, 0.6), 4px 4px 0 rgba(247, 147, 26, 0.2);
+    --pixel-shadow-dark: 2px 2px 0 #000, 4px 4px 0 rgba(0,0,0,0.5);
+    --pixel-glow: 0 0 0 2px var(--accent-20), 2px 2px 0 var(--accent-50), 4px 4px 0 var(--accent-20);
+    --pixel-inset: inset 2px 2px 0 rgba(255,255,255,0.1), inset -2px -2px 0 rgba(0,0,0,0.3);
 }
 
 /* Reset */
@@ -72,24 +79,26 @@ html {
 body {
     background-color: var(--bg-deep);
     color: var(--text-primary);
-    font-family: 'Space Mono', ui-monospace, monospace;
-    font-size: 14px;
-    line-height: 1.6;
+    font-family: 'Press Start 2P', cursive;
+    font-size: 10px;
+    line-height: 1.8;
     overflow-x: hidden;
     min-height: 100vh;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
 }
 
-/* Grid background atmosphere */
+/* Pixel dot-grid background pattern */
 body::before {
     content: '';
     position: fixed;
     inset: 0;
     pointer-events: none;
     z-index: 0;
-    opacity: 0.035;
+    opacity: 0.04;
     background-image:
-        repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.15) 0px, transparent 1px, transparent 60px),
-        repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.15) 0px, transparent 1px, transparent 60px);
+        radial-gradient(circle, rgba(247,147,26,0.8) 1px, transparent 1px);
+    background-size: 16px 16px;
 }
 
 /* Top accent bar */
@@ -99,11 +108,44 @@ body::after {
     top: 0;
     left: 0;
     right: 0;
-    height: 2px;
+    height: 4px;
     background: linear-gradient(90deg, var(--accent), var(--accent-b), var(--accent-c), var(--accent));
     background-size: 200% 100%;
     animation: horizonShift 8s linear infinite;
     z-index: 10001;
+    pointer-events: none;
+    image-rendering: pixelated;
+}
+
+/* CRT Overlay */
+.crt-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9998;
+    pointer-events: none;
+    /* Scanlines */
+    background:
+        repeating-linear-gradient(
+            0deg,
+            rgba(0, 0, 0, 0.04) 0px,
+            rgba(0, 0, 0, 0.04) 1px,
+            transparent 1px,
+            transparent 2px
+        );
+    /* CRT vignette overlay */
+    /* mask-image is used so vignette doesn't affect pointer events — already none */
+}
+
+/* Separate vignette element via pseudo */
+.crt-overlay::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(
+        ellipse at center,
+        transparent 50%,
+        rgba(0, 0, 0, 0.4) 100%
+    );
     pointer-events: none;
 }
 
@@ -113,16 +155,17 @@ body::after {
     min-height: 100vh;
 }
 
-/* Scrollbar */
+/* Pixel scrollbar */
 ::-webkit-scrollbar {
-    width: 6px;
+    width: 8px;
 }
 ::-webkit-scrollbar-track {
-    background: var(--bg-deep);
+    background: var(--bg-void);
+    border-left: 2px solid rgba(255, 255, 255, 0.04);
 }
 ::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.08);
-    border-radius: 3px;
+    background: rgba(247, 147, 26, 0.3);
+    border: 1px solid rgba(247, 147, 26, 0.1);
 }
 ::-webkit-scrollbar-thumb:hover {
     background: var(--accent-50);
@@ -131,7 +174,7 @@ body::after {
 /* Focus */
 :focus-visible {
     outline: 2px solid var(--accent);
-    outline-offset: 2px;
+    outline-offset: 0;
 }
 
 /* Selection */
@@ -149,25 +192,31 @@ body::after {
 /* Typography */
 h1, h2, h3, h4, h5, h6 {
     color: var(--text-primary);
-    line-height: 1.2;
+    line-height: 1.4;
+    font-family: 'Press Start 2P', cursive;
 }
 
 a {
     color: var(--accent);
     text-decoration: none;
-    transition: color 200ms ease, opacity 200ms ease;
+    transition: color 100ms step-start, opacity 100ms step-start;
 }
 
 a:hover {
     opacity: 0.8;
 }
 
+img, svg {
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+}
+
 input, textarea, select {
-    font-family: inherit;
+    font-family: 'Press Start 2P', cursive;
 }
 
 button {
-    font-family: inherit;
+    font-family: 'Press Start 2P', cursive;
     cursor: pointer;
 }
 
@@ -190,11 +239,21 @@ wcm-modal::part(container) {
     margin: auto !important;
 }
 
+/* Mute toggle hover */
+.mute-toggle:hover {
+    border-color: var(--accent);
+    box-shadow: var(--pixel-shadow);
+}
+
 /* Reduced motion */
 @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after {
         animation-duration: 0.01ms !important;
         animation-iteration-count: 1 !important;
         transition-duration: 0.01ms !important;
+    }
+
+    .crt-overlay {
+        display: none;
     }
 }
