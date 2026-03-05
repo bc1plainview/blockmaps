@@ -172,8 +172,9 @@ export function useMint(): UseMintReturn {
                 maximumAllowedSatToSpend: 0n,
             });
 
-            if (receipt && typeof receipt === 'object' && 'txid' in receipt) {
-                setMintTxId(String(receipt.txid));
+            if (receipt && typeof receipt === 'object') {
+                const txid = ('transactionId' in receipt ? receipt.transactionId : receipt.txid) as string | undefined;
+                if (txid) setMintTxId(String(txid));
             }
             setMintStatus('success');
         } catch (err) {
