@@ -19,45 +19,35 @@ function ensureScreenshotDir(): void {
     }
 }
 
-// ─── Glass-morphism Cards ─────────────────────────────────────────────────────
+// ─── Pixel Cards ─────────────────────────────────────────────────────────────
 
-test('[design] glass-morphism cards use backdrop-filter', async ({ page }) => {
+test('[design] pixel cards use solid borders and pixel shadows', async ({ page }) => {
     await page.goto('/gallery');
     await page.waitForLoadState('domcontentloaded');
 
-    const hasBackdropFilter = await page.evaluate(() => {
-        const cards = document.querySelectorAll('.glass-card, [class*="glass"]');
-        if (cards.length === 0) {
-            // Verify the CSS rule exists even if no cards are rendered yet
-            const sheets = Array.from(document.styleSheets);
-            for (const sheet of sheets) {
-                try {
-                    const rules = Array.from(sheet.cssRules);
-                    for (const rule of rules) {
-                        if (rule instanceof CSSStyleRule) {
-                            if (
-                                rule.selectorText?.includes('glass') &&
-                                rule.style.backdropFilter
-                            ) {
-                                return true;
-                            }
+    const hasPixelBorders = await page.evaluate(() => {
+        const sheets = Array.from(document.styleSheets);
+        for (const sheet of sheets) {
+            try {
+                const rules = Array.from(sheet.cssRules);
+                for (const rule of rules) {
+                    if (rule instanceof CSSStyleRule) {
+                        if (
+                            rule.selectorText?.includes('.glass-card') &&
+                            rule.style.border &&
+                            rule.style.boxShadow
+                        ) {
+                            return true;
                         }
                     }
-                } catch {
-                    // Cross-origin
                 }
-            }
-            return false;
-        }
-        for (const card of Array.from(cards)) {
-            const style = getComputedStyle(card);
-            if (style.backdropFilter && style.backdropFilter !== 'none') {
-                return true;
+            } catch {
+                // Cross-origin
             }
         }
         return false;
     });
-    expect(hasBackdropFilter, '.glass-card elements missing backdrop-filter').toBe(true);
+    expect(hasPixelBorders, '.glass-card missing pixel border or box-shadow').toBe(true);
 });
 
 // ─── No Hardcoded Colors (< threshold) ──────────────────────────────────────
@@ -110,9 +100,9 @@ test('[design] CSS uses custom properties, not hardcoded hex colors', async ({ p
     ).toBeLessThan(15);
 });
 
-// ─── Space Mono / Monospace Display Font ─────────────────────────────────────
+// ─── Press Start 2P Pixel Font ───────────────────────────────────────────────
 
-test('[design] body uses Space Mono / monospace font (not Inter/Roboto/Arial)', async ({ page }) => {
+test('[design] body uses Press Start 2P pixel font (not Inter/Roboto/Arial)', async ({ page }) => {
     await page.goto('/');
 
     const fontFamily = await page.evaluate(() => {
@@ -124,12 +114,11 @@ test('[design] body uses Space Mono / monospace font (not Inter/Roboto/Arial)', 
         expect(fontFamily, `Forbidden display font detected: ${font}`).not.toContain(font);
     }
 
-    // Must use monospace
-    const isMonospace =
-        fontFamily.includes('mono') ||
-        fontFamily.includes('monospace') ||
-        fontFamily.includes('courier');
-    expect(isMonospace, `Body font "${fontFamily}" is not a monospace font`).toBe(true);
+    // Must use Press Start 2P or cursive fallback
+    const isPixelFont =
+        fontFamily.includes('press start 2p') ||
+        fontFamily.includes('cursive');
+    expect(isPixelFont, `Body font "${fontFamily}" is not Press Start 2P`).toBe(true);
 });
 
 // ─── Background Atmosphere ────────────────────────────────────────────────────

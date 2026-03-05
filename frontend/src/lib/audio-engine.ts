@@ -17,7 +17,8 @@ const lastPlayed: Partial<Record<SoundType, number>> = {};
 
 function isMuted(): boolean {
     try {
-        return localStorage.getItem(MUTE_KEY) === 'true';
+        // Default to muted -- user must explicitly unmute (spec: "sounds off by default")
+        return localStorage.getItem(MUTE_KEY) !== 'false';
     } catch {
         return true;
     }

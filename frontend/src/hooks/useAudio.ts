@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
     getMuted,
     toggleMuted,
@@ -23,19 +23,6 @@ interface UseAudioReturn {
 
 export function useAudio(): UseAudioReturn {
     const [isMuted, setIsMuted] = useState<boolean>(getMuted());
-
-    // Initialize AudioContext on first user interaction
-    useEffect((): (() => void) => {
-        const initCtx = (): void => {
-            // AudioContext is initialized lazily inside audio-engine on first play call.
-            // This listener ensures the context state is known early.
-            document.removeEventListener('click', initCtx, { capture: true });
-        };
-        document.addEventListener('click', initCtx, { capture: true });
-        return (): void => {
-            document.removeEventListener('click', initCtx, { capture: true });
-        };
-    }, []);
 
     const handleToggleMute = useCallback((): void => {
         const next = toggleMuted();
