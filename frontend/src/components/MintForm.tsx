@@ -4,7 +4,7 @@ import { SVGPreview } from './SVGPreview.js';
 import { ExplorerLinks } from './ExplorerLinks.js';
 import { useBlockData } from '../hooks/useBlockData.js';
 import { useMint, useIsMinted } from '../hooks/useBlockMaps.js';
-import { CONTRACT_ADDRESS } from '../lib/constants.js';
+import { CONTRACT_ADDRESS_HEX } from '../lib/constants.js';
 import type { BlockData } from '../types/index.js';
 
 function formatTimestamp(ts: bigint): string {
@@ -25,6 +25,12 @@ function formatDifficulty(d: bigint): string {
     if (num >= 1e9) return `${(num / 1e9).toFixed(2)}G`;
     if (num >= 1e6) return `${(num / 1e6).toFixed(2)}M`;
     return num.toLocaleString();
+}
+
+function satsToBtcDisplay(sats: bigint): string {
+    if (sats === 0n) return '0 BTC';
+    const btc = Number(sats) / 100_000_000;
+    return `${btc.toFixed(8)} BTC`;
 }
 
 interface StatCardProps {
@@ -81,12 +87,17 @@ export function MintForm(): React.ReactElement {
 
     const handleMint = useCallback(async (): Promise<void> => {
         if (!checkedBlock) return;
+        // Pass all 9 params to new contract signature
         await mint(
             checkedBlock.blockHeight,
             checkedBlock.blockHash,
             checkedBlock.txCount,
             checkedBlock.timestamp,
             checkedBlock.difficulty,
+            checkedBlock.blockSize,
+            checkedBlock.blockWeight,
+            checkedBlock.totalFees,
+            checkedBlock.blockReward,
         );
     }, [checkedBlock, mint]);
 
@@ -194,6 +205,13 @@ export function MintForm(): React.ReactElement {
                                 <StatCard label="Difficulty" value={formatDifficulty(checkedBlock.difficulty)} />
                                 <StatCard label="Timestamp" value={formatTimestamp(checkedBlock.timestamp)} />
                             </div>
+
+                            {/* New fields row */}
+                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                <StatCard label="Size" value={`${(Number(checkedBlock.blockSize) / 1000).toFixed(1)} kB`} />
+                                <StatCard label="Total Fees" value={satsToBtcDisplay(checkedBlock.totalFees)} />
+                                <StatCard label="Reward" value={satsToBtcDisplay(checkedBlock.blockReward)} />
+                            </div>
                         </div>
                     </div>
 
@@ -243,7 +261,7 @@ export function MintForm(): React.ReactElement {
                                 <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '8px', fontVariantNumeric: 'tabular-nums' }}>
                                     TXID: {mintTxId}
                                 </div>
-                                <ExplorerLinks txid={mintTxId} contractAddress={CONTRACT_ADDRESS} />
+                                <ExplorerLinks txid={mintTxId} contractAddress={CONTRACT_ADDRESS_HEX} />
                             </div>
                         )}
 

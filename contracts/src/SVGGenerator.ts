@@ -1,22 +1,22 @@
 import { u256 } from '@btc-vision/as-bignum/assembly';
 
-// Synthwave palette: 16 colors, each # becomes %23 for data URI embedding.
-const PALETTE_0: string = '%23ff00aa';
-const PALETTE_1: string = '%2300ffcc';
-const PALETTE_2: string = '%23ff6600';
-const PALETTE_3: string = '%239900ff';
-const PALETTE_4: string = '%2300aaff';
-const PALETTE_5: string = '%23ffcc00';
-const PALETTE_6: string = '%23ff0066';
-const PALETTE_7: string = '%2300ff66';
-const PALETTE_8: string = '%233300ff';
-const PALETTE_9: string = '%23ff3366';
-const PALETTE_A: string = '%236600ff';
-const PALETTE_B: string = '%2300ccff';
-const PALETTE_C: string = '%23ff9900';
-const PALETTE_D: string = '%23cc00ff';
-const PALETTE_E: string = '%2333ff00';
-const PALETTE_F: string = '%23ff0033';
+// Bitcoin orange palette: 16 warm colors, each # becomes %23 for data URI embedding.
+const PALETTE_0: string = '%23f7931a';
+const PALETTE_1: string = '%23ffcc00';
+const PALETTE_2: string = '%23ff6b00';
+const PALETTE_3: string = '%23ffa940';
+const PALETTE_4: string = '%23e8821a';
+const PALETTE_5: string = '%23ffdd44';
+const PALETTE_6: string = '%23cc5500';
+const PALETTE_7: string = '%23ffb732';
+const PALETTE_8: string = '%23ff8c00';
+const PALETTE_9: string = '%23f5a623';
+const PALETTE_A: string = '%23e67300';
+const PALETTE_B: string = '%23ffc93c';
+const PALETTE_C: string = '%23d4760a';
+const PALETTE_D: string = '%23ffaa00';
+const PALETTE_E: string = '%23b35c00';
+const PALETTE_F: string = '%23ffe066';
 
 function paletteColor(index: u8): string {
     const i: u8 = index & 0x0f;
@@ -116,7 +116,7 @@ export function generateSVG(blockHeight: u64, hashU256: u256, txCount: u64): str
 
     let svg: string = "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 320 320'>";
     svg += "<rect width='320' height='320' fill='%230a0a1a'/>";
-    svg += "<text x='160' y='28' text-anchor='middle' fill='%23ff00aa' font-size='14' font-family='monospace'>BLOCK %23" + blockHeight.toString() + "</text>";
+    svg += "<text x='160' y='28' text-anchor='middle' fill='%23f7931a' font-size='14' font-family='monospace'>BLOCK %23" + blockHeight.toString() + "</text>";
     svg += "<g transform='translate(20,40)'>";
 
     for (let row: u32 = 0; row < gridSize; row++) {

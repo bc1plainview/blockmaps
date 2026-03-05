@@ -23,6 +23,10 @@ const blockTimestampPointer: u16 = Blockchain.nextPointer;
 const blockDifficultyPointer: u16 = Blockchain.nextPointer;
 const blockMinterPointer: u16 = Blockchain.nextPointer;
 const svgStoragePointer: u16 = Blockchain.nextPointer;
+const blockSizePointer: u16 = Blockchain.nextPointer;
+const blockWeightPointer: u16 = Blockchain.nextPointer;
+const totalFeesPointer: u16 = Blockchain.nextPointer;
+const blockRewardPointer: u16 = Blockchain.nextPointer;
 
 /**
  * BlockMinted event emitted when a block is minted.
@@ -56,6 +60,14 @@ export class BlockMaps extends OP721 {
     private readonly blockDifficultyMap: StoredMapU256;
     // Maps blockHeight (u256) -> minter address packed as u256 (big-endian)
     private readonly blockMinterMap: StoredMapU256;
+    // Maps blockHeight (u256) -> block size in bytes (u256)
+    private readonly blockSizeMap: StoredMapU256;
+    // Maps blockHeight (u256) -> block weight in WU (u256)
+    private readonly blockWeightMap: StoredMapU256;
+    // Maps blockHeight (u256) -> total fees in sats (u256)
+    private readonly totalFeesMap: StoredMapU256;
+    // Maps blockHeight (u256) -> block reward in sats (u256)
+    private readonly blockRewardMap: StoredMapU256;
 
     public constructor() {
         super();
@@ -65,6 +77,10 @@ export class BlockMaps extends OP721 {
         this.blockTimestampMap = new StoredMapU256(blockTimestampPointer);
         this.blockDifficultyMap = new StoredMapU256(blockDifficultyPointer);
         this.blockMinterMap = new StoredMapU256(blockMinterPointer);
+        this.blockSizeMap = new StoredMapU256(blockSizePointer);
+        this.blockWeightMap = new StoredMapU256(blockWeightPointer);
+        this.totalFeesMap = new StoredMapU256(totalFeesPointer);
+        this.blockRewardMap = new StoredMapU256(blockRewardPointer);
     }
 
     public override onDeployment(_calldata: Calldata): void {
@@ -94,6 +110,10 @@ export class BlockMaps extends OP721 {
         { name: 'txCount', type: ABIDataTypes.UINT64 },
         { name: 'timestamp', type: ABIDataTypes.UINT64 },
         { name: 'difficulty', type: ABIDataTypes.UINT256 },
+        { name: 'blockSize', type: ABIDataTypes.UINT64 },
+        { name: 'blockWeight', type: ABIDataTypes.UINT64 },
+        { name: 'totalFees', type: ABIDataTypes.UINT64 },
+        { name: 'blockReward', type: ABIDataTypes.UINT64 },
     )
     @returns({ name: 'tokenId', type: ABIDataTypes.UINT256 })
     @emit('BlockMinted')
@@ -103,6 +123,10 @@ export class BlockMaps extends OP721 {
         const txCount: u64 = calldata.readU64();
         const timestamp: u64 = calldata.readU64();
         const difficulty: u256 = calldata.readU256();
+        const blockSize: u64 = calldata.readU64();
+        const blockWeight: u64 = calldata.readU64();
+        const totalFees: u64 = calldata.readU64();
+        const blockReward: u64 = calldata.readU64();
 
         // Only past or current blocks can be minted
         if (blockHeight > Blockchain.block.number) {
@@ -128,6 +152,10 @@ export class BlockMaps extends OP721 {
         this.blockTimestampMap.set(tokenId, u256.fromU64(timestamp));
         this.blockDifficultyMap.set(tokenId, difficulty);
         this.blockMinterMap.set(tokenId, this._u256FromAddress(minter));
+        this.blockSizeMap.set(tokenId, u256.fromU64(blockSize));
+        this.blockWeightMap.set(tokenId, u256.fromU64(blockWeight));
+        this.totalFeesMap.set(tokenId, u256.fromU64(totalFees));
+        this.blockRewardMap.set(tokenId, u256.fromU64(blockReward));
 
         // Generate on-chain SVG and store in custom large-string storage
         // (bypasses OP721's 200-char MAX_URI_LENGTH by using StoredString directly)
@@ -175,6 +203,10 @@ export class BlockMaps extends OP721 {
         { name: 'timestamp', type: ABIDataTypes.UINT256 },
         { name: 'difficulty', type: ABIDataTypes.UINT256 },
         { name: 'owner', type: ABIDataTypes.ADDRESS },
+        { name: 'blockSize', type: ABIDataTypes.UINT256 },
+        { name: 'blockWeight', type: ABIDataTypes.UINT256 },
+        { name: 'totalFees', type: ABIDataTypes.UINT256 },
+        { name: 'blockReward', type: ABIDataTypes.UINT256 },
     )
     public getBlockData(calldata: Calldata): BytesWriter {
         const blockHeight: u64 = calldata.readU64();
@@ -190,14 +222,22 @@ export class BlockMaps extends OP721 {
         const difficulty: u256 = this.blockDifficultyMap.get(tokenId);
         const ownerU256: u256 = this.blockMinterMap.get(tokenId);
         const owner: Address = this._addressFromU256(ownerU256);
+        const blockSize: u256 = this.blockSizeMap.get(tokenId);
+        const blockWeight: u256 = this.blockWeightMap.get(tokenId);
+        const totalFees: u256 = this.totalFeesMap.get(tokenId);
+        const blockReward: u256 = this.blockRewardMap.get(tokenId);
 
-        // 4 × u256 (32 bytes) + 1 × Address (32 bytes) = 160 bytes
-        const writer = new BytesWriter(4 * U256_BYTE_LENGTH + ADDRESS_BYTE_LENGTH);
+        // 8 × u256 (32 bytes each) + 1 × Address (32 bytes) = 288 bytes
+        const writer = new BytesWriter(8 * U256_BYTE_LENGTH + ADDRESS_BYTE_LENGTH);
         writer.writeU256(hash16);
         writer.writeU256(txCount);
         writer.writeU256(timestamp);
         writer.writeU256(difficulty);
         writer.writeAddress(owner);
+        writer.writeU256(blockSize);
+        writer.writeU256(blockWeight);
+        writer.writeU256(totalFees);
+        writer.writeU256(blockReward);
         return writer;
     }
 

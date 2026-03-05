@@ -1,7 +1,8 @@
 import { useState, useCallback } from 'react';
-import type { BlockData } from '../types/index.js';
+import type { BlockData, EnhancedBlockData } from '../types/index.js';
 
-const MEMPOOL_API = 'https://mempool.opnet.org/testnet4/api';
+// Bitcoin mainnet block data from mempool.space (NOT the OPNet Signet fork)
+const MEMPOOL_API = 'https://mempool.space/api';
 
 interface MempoolBlock {
     id: string;
@@ -15,6 +16,8 @@ interface MempoolBlock {
     weight: number;
     previousblockhash: string;
     mediantime: number;
+    merkle_root: string;
+    version: number;
     extras?: {
         coinbaseRaw?: string;
         medianFee?: number;
@@ -29,6 +32,7 @@ interface UseBlockDataReturn {
     loading: boolean;
     error: string | null;
     fetchBlock: (height: bigint) => Promise<BlockData | null>;
+    fetchEnhancedBlock: (hashOrHeight: string | bigint) => Promise<EnhancedBlockData | null>;
     reset: () => void;
 }
 
@@ -57,12 +61,19 @@ export function useBlockData(): UseBlockDataReturn {
             }
             const block = await blockResponse.json() as MempoolBlock;
 
+            const totalFeesSats = block.extras?.totalFees ?? 0;
+            const rewardSats = block.extras?.reward ?? 0;
+
             const data: BlockData = {
                 blockHeight: height,
                 blockHash: blockHash.trim(),
                 txCount: BigInt(block.tx_count),
                 timestamp: BigInt(block.timestamp),
                 difficulty: BigInt(Math.round(block.difficulty)),
+                blockSize: BigInt(block.size),
+                blockWeight: BigInt(block.weight),
+                totalFees: BigInt(Math.round(totalFeesSats)),
+                blockReward: BigInt(Math.round(rewardSats)),
             };
 
             setBlockData(data);
@@ -76,11 +87,49 @@ export function useBlockData(): UseBlockDataReturn {
         }
     }, []);
 
+    const fetchEnhancedBlock = useCallback(async (hashOrHeight: string | bigint): Promise<EnhancedBlockData | null> => {
+        try {
+            let hash: string;
+            if (typeof hashOrHeight === 'bigint') {
+                const hashResponse = await fetch(`${MEMPOOL_API}/block-height/${hashOrHeight.toString()}`);
+                if (!hashResponse.ok) return null;
+                hash = (await hashResponse.text()).trim();
+            } else {
+                hash = hashOrHeight;
+            }
+
+            const blockResponse = await fetch(`${MEMPOOL_API}/block/${hash}`);
+            if (!blockResponse.ok) return null;
+            const block = await blockResponse.json() as MempoolBlock;
+
+            const enhanced: EnhancedBlockData = {
+                id: block.id,
+                height: block.height,
+                tx_count: block.tx_count,
+                timestamp: block.timestamp,
+                difficulty: block.difficulty,
+                bits: block.bits,
+                nonce: block.nonce,
+                size: block.size,
+                weight: block.weight,
+                merkle_root: block.merkle_root,
+                version: block.version,
+                previousblockhash: block.previousblockhash,
+                mediantime: block.mediantime,
+                extras: block.extras,
+            };
+
+            return enhanced;
+        } catch {
+            return null;
+        }
+    }, []);
+
     const reset = useCallback((): void => {
         setBlockData(null);
         setError(null);
         setLoading(false);
     }, []);
 
-    return { blockData, loading, error, fetchBlock, reset };
+    return { blockData, loading, error, fetchBlock, fetchEnhancedBlock, reset };
 }

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { WalletButton } from './WalletButton.js';
+import { SearchBar } from './SearchBar.js';
 
 interface LayoutProps {
     children: React.ReactNode;
@@ -65,6 +66,7 @@ export function Layout({ children }: LayoutProps): React.ReactElement {
                         alignItems: 'center',
                         justifyContent: 'space-between',
                         width: '100%',
+                        gap: 16,
                     }}
                 >
                     {/* Logo */}
@@ -75,9 +77,11 @@ export function Layout({ children }: LayoutProps): React.ReactElement {
                             display: 'flex',
                             alignItems: 'center',
                             gap: '10px',
+                            flexShrink: 0,
                         }}
                     >
                         <span
+                            className="header-logo"
                             style={{
                                 fontSize: '18px',
                                 fontWeight: 700,
@@ -100,8 +104,11 @@ export function Layout({ children }: LayoutProps): React.ReactElement {
                         <NavLink to="/my" isActive={location.pathname === '/my'}>My Maps</NavLink>
                     </nav>
 
-                    {/* Wallet */}
-                    <WalletButton />
+                    {/* Search bar + Wallet */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
+                        <SearchBar />
+                        <WalletButton />
+                    </div>
                 </div>
             </header>
 

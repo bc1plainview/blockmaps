@@ -10,10 +10,10 @@
  */
 
 const PALETTE: readonly string[] = [
-    '#ff00aa', '#00ffcc', '#ff6600', '#9900ff',
-    '#00aaff', '#ffcc00', '#ff0066', '#00ff66',
-    '#3300ff', '#ff3366', '#6600ff', '#00ccff',
-    '#ff9900', '#cc00ff', '#33ff00', '#ff0033',
+    '#f7931a', '#ffcc00', '#ff6b00', '#ffa940',
+    '#e8821a', '#ffdd44', '#cc5500', '#ffb732',
+    '#ff8c00', '#f5a623', '#e67300', '#ffc93c',
+    '#d4760a', '#ffaa00', '#b35c00', '#ffe066',
 ];
 
 function opacityStr(byteVal: number): string {
@@ -55,7 +55,7 @@ export function generateSVG(blockHeight: bigint, hashHex: string, txCount: numbe
 
     let svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 320 320'>`;
     svg += `<rect width='320' height='320' fill='#0a0a1a'/>`;
-    svg += `<text x='160' y='28' text-anchor='middle' fill='#ff00aa' font-size='14' font-family='monospace'>BLOCK #${blockHeight.toString()}</text>`;
+    svg += `<text x='160' y='28' text-anchor='middle' fill='#f7931a' font-size='14' font-family='monospace'>BLOCK #${blockHeight.toString()}</text>`;
     svg += `<g transform='translate(20,40)'>`;
 
     for (let row = 0; row < gridSize; row++) {

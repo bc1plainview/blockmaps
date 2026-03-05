@@ -25,6 +25,22 @@
                 {
                     "name": "difficulty",
                     "type": "UINT256"
+                },
+                {
+                    "name": "blockSize",
+                    "type": "UINT64"
+                },
+                {
+                    "name": "blockWeight",
+                    "type": "UINT64"
+                },
+                {
+                    "name": "totalFees",
+                    "type": "UINT64"
+                },
+                {
+                    "name": "blockReward",
+                    "type": "UINT64"
                 }
             ],
             "outputs": [
@@ -83,6 +99,22 @@
                 {
                     "name": "owner",
                     "type": "ADDRESS"
+                },
+                {
+                    "name": "blockSize",
+                    "type": "UINT256"
+                },
+                {
+                    "name": "blockWeight",
+                    "type": "UINT256"
+                },
+                {
+                    "name": "totalFees",
+                    "type": "UINT256"
+                },
+                {
+                    "name": "blockReward",
+                    "type": "UINT256"
                 }
             ]
         },

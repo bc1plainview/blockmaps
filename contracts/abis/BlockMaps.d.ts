@@ -43,6 +43,10 @@ export type GetBlockData = CallResult<
         timestamp: bigint;
         difficulty: bigint;
         owner: Address;
+        blockSize: bigint;
+        blockWeight: bigint;
+        totalFees: bigint;
+        blockReward: bigint;
     },
     OPNetEvent<never>[]
 >;
@@ -67,6 +71,10 @@ export interface IBlockMaps extends IOP_NETContract {
         txCount: bigint,
         timestamp: bigint,
         difficulty: bigint,
+        blockSize: bigint,
+        blockWeight: bigint,
+        totalFees: bigint,
+        blockReward: bigint,
     ): Promise<Mint>;
     isMinted(blockHeight: bigint): Promise<IsMinted>;
     getBlockData(blockHeight: bigint): Promise<GetBlockData>;

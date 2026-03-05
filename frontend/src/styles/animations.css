@@ -34,6 +34,64 @@
     }
 }
 
+/* Fade in */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Slide up for live feed items */
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Panel slide in from right */
+@keyframes panelSlideIn {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+/* Staggered cell reveal */
+@keyframes cellReveal {
+    from {
+        opacity: 0;
+        transform: scale(0.5);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+/* Pulse glow for selected grid cell */
+@keyframes pulseGlow {
+    0%, 100% {
+        filter: drop-shadow(0 0 4px var(--accent)) drop-shadow(0 0 8px var(--accent-20));
+    }
+    50% {
+        filter: drop-shadow(0 0 10px var(--accent)) drop-shadow(0 0 20px var(--accent-50));
+    }
+}
+
 /* Neon glow for text */
 @keyframes textGlow {
     0%, 100% {
@@ -72,7 +130,31 @@
     animation: fadeInUp 400ms ease forwards;
 }
 
+/* Slide up on mount */
+.slide-up {
+    animation: slideUp 350ms ease both;
+}
+
+/* Page enter */
+.page-enter {
+    animation: fadeIn 250ms ease both;
+}
+
 /* Neon heading glow */
 .neon-glow {
     animation: textGlow 3s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .fade-in,
+    .slide-up,
+    .page-enter,
+    .neon-glow,
+    .reveal-hidden,
+    .reveal-visible {
+        animation: none;
+        transition: none;
+        opacity: 1;
+        transform: none;
+    }
 }

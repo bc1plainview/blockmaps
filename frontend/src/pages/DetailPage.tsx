@@ -1,66 +1,31 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { SVGPreview } from '../components/SVGPreview.js';
+import { InteractiveGrid } from '../components/InteractiveGrid.js';
+import { TxPanel } from '../components/TxPanel.js';
+import { BlockStatsCard } from '../components/BlockStatsCard.js';
 import { ExplorerLinks } from '../components/ExplorerLinks.js';
 import { useGetBlockData } from '../hooks/useBlockMaps.js';
-import { mempoolBlockUrl, CONTRACT_ADDRESS } from '../lib/constants.js';
-import type { MintedBlockData } from '../types/index.js';
+import { useBlockData } from '../hooks/useBlockData.js';
+import { useBlockTxs } from '../hooks/useBlockTxs.js';
+import { CONTRACT_ADDRESS_HEX } from '../lib/constants.js';
+import type { EnhancedBlockData } from '../types/index.js';
 
 function hash16ToHex(hash16: bigint): string {
     const hex = hash16.toString(16).padStart(32, '0');
     return hex.padEnd(64, '0');
 }
 
-function formatTimestamp(ts: bigint): string {
-    const date = new Date(Number(ts) * 1000);
-    return date.toLocaleString('en-US', {
-        weekday: 'short',
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        timeZoneName: 'short',
-    });
-}
-
-function formatDifficulty(d: bigint): string {
-    const num = Number(d);
-    if (num >= 1e12) return `${(num / 1e12).toFixed(4)}T`;
-    if (num >= 1e9) return `${(num / 1e9).toFixed(4)}G`;
-    if (num >= 1e6) return `${(num / 1e6).toFixed(4)}M`;
-    return num.toLocaleString();
-}
-
-interface CopyButtonProps {
-    value: string;
-}
-
-function CopyButton({ value }: CopyButtonProps): React.ReactElement {
-    const [copied, setCopied] = useState(false);
-
-    const handleCopy = useCallback(async (): Promise<void> => {
-        await navigator.clipboard.writeText(value);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1800);
-    }, [value]);
-
-    return (
-        <button
-            type="button"
-            className="copy-btn"
-            onClick={() => void handleCopy()}
-            aria-label="Copy to clipboard"
-        >
-            {copied ? 'Copied' : 'Copy'}
-        </button>
-    );
-}
-
 export function DetailPage(): React.ReactElement {
     const { height } = useParams<{ height: string }>();
     const { mintedBlockData, loadingMintedData, fetchMintedBlockData } = useGetBlockData();
+    const { fetchEnhancedBlock } = useBlockData();
+    const { txids, loading: loadingTxs, fetchTxids } = useBlockTxs();
+
     const [error, setError] = useState<string | null>(null);
+    const [selectedCell, setSelectedCell] = useState<number | null>(null);
+    const [activeTxid, setActiveTxid] = useState<string | null>(null);
+    const [enhancedBlock, setEnhancedBlock] = useState<EnhancedBlockData | null>(null);
+    const [blockHash, setBlockHash] = useState<string | null>(null);
 
     let blockHeight: bigint = 0n;
     try {
@@ -70,25 +35,59 @@ export function DetailPage(): React.ReactElement {
     }
 
     useEffect(() => {
-        if (!height) {
+        if (blockHeight === 0n) {
             setError('Invalid block height');
             return;
         }
-        void fetchMintedBlockData(BigInt(height)).then((data) => {
+
+        void fetchMintedBlockData(blockHeight).then((data) => {
             if (!data || data.hash16 === 0n) {
-                setError(`Block #${height} has not been minted.`);
+                setError(`Block #${blockHeight.toString()} has not been minted yet.`);
             }
         });
-    }, [height, fetchMintedBlockData]);
+    }, [blockHeight, fetchMintedBlockData]);
 
-    const data: MintedBlockData | null = mintedBlockData;
+    // Fetch enhanced block data + txids from mempool.space
+    useEffect(() => {
+        if (blockHeight === 0n) return;
+
+        void fetchEnhancedBlock(blockHeight).then((data) => {
+            if (data) {
+                setEnhancedBlock(data);
+                setBlockHash(data.id);
+                void fetchTxids(data.id);
+            }
+        });
+    }, [blockHeight, fetchEnhancedBlock, fetchTxids]);
+
+    const handleCellClick = useCallback((cellIndex: number): void => {
+        setSelectedCell(cellIndex);
+
+        // Determine which txid(s) this cell represents
+        const txCount = mintedBlockData ? Number(mintedBlockData.txCount) : 0;
+        const txsPerCell = Math.ceil(txCount / 256);
+        const txStart = cellIndex * txsPerCell;
+        const txid = txids[txStart] ?? null;
+
+        if (txid) {
+            setActiveTxid(txid);
+        } else {
+            // No txid loaded yet — open panel with first available
+            setActiveTxid(null);
+        }
+    }, [mintedBlockData, txids]);
+
+    const handlePanelClose = useCallback((): void => {
+        setActiveTxid(null);
+        setSelectedCell(null);
+    }, []);
 
     if (loadingMintedData) {
         return (
             <div className="page">
-                <div className="container" style={{ maxWidth: '800px' }}>
+                <div className="container" style={{ maxWidth: '1100px' }}>
                     <div style={{ display: 'flex', gap: 'var(--spacing-2xl)', flexWrap: 'wrap' }}>
-                        <div className="skeleton" style={{ width: '320px', height: '320px', borderRadius: '12px', flexShrink: 0 }} />
+                        <div className="skeleton" style={{ width: '400px', height: '400px', borderRadius: '12px', flexShrink: 0 }} />
                         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '16px', minWidth: '200px' }}>
                             <div className="skeleton" style={{ height: '32px', width: '70%', borderRadius: '4px' }} />
                             <div className="skeleton" style={{ height: '200px', borderRadius: '8px' }} />
@@ -99,7 +98,7 @@ export function DetailPage(): React.ReactElement {
         );
     }
 
-    if (error || !data) {
+    if (error || !mintedBlockData) {
         return (
             <div className="page">
                 <div className="container" style={{ maxWidth: '800px' }}>
@@ -114,11 +113,14 @@ export function DetailPage(): React.ReactElement {
         );
     }
 
-    const hashHex = hash16ToHex(data.hash16);
+    const data = mintedBlockData;
+    const hashHex = blockHash ?? hash16ToHex(data.hash16);
+    const txCount = Number(data.txCount);
+    const txsPerCell = Math.ceil(txCount / 256);
 
     return (
-        <div className="page">
-            <div className="container" style={{ maxWidth: '900px' }}>
+        <div className="page page-enter" style={{ paddingBottom: 80 }}>
+            <div className="container" style={{ maxWidth: '1100px' }}>
                 {/* Back link */}
                 <Link
                     to="/gallery"
@@ -139,136 +141,132 @@ export function DetailPage(): React.ReactElement {
                     Back to Gallery
                 </Link>
 
-                <div style={{ display: 'flex', gap: 'var(--spacing-2xl)', flexWrap: 'wrap', alignItems: 'flex-start' }}>
-                    {/* SVG with glow border */}
-                    <div
-                        style={{
-                            flexShrink: 0,
-                            borderRadius: '12px',
-                            padding: '3px',
-                            background: 'linear-gradient(135deg, var(--accent), var(--accent-b), var(--accent-c))',
-                            boxShadow: '0 0 40px var(--accent-20), 0 0 80px rgba(0, 255, 204, 0.1)',
-                        }}
-                    >
-                        <SVGPreview
-                            blockHeight={blockHeight}
-                            hashHex={hashHex}
-                            txCount={Number(data.txCount)}
-                            size={320}
-                        />
+                {/* Page header */}
+                <div style={{ marginBottom: 'var(--spacing-xl)' }}>
+                    <h1 style={{ fontSize: 28, fontWeight: 700, color: 'var(--accent)', marginBottom: 4, fontVariantNumeric: 'tabular-nums' }}>
+                        Block #{blockHeight.toLocaleString()}
+                    </h1>
+                    <p style={{ color: 'var(--text-muted)', fontSize: 12 }}>
+                        On-chain BlockMap NFT &mdash; Click a parcel to inspect its transaction
+                    </p>
+                </div>
+
+                {/* Interactive grid */}
+                <div style={{ marginBottom: 'var(--spacing-xl)' }}>
+                    <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                        <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                            District View &mdash; {txCount.toLocaleString()} transactions
+                            {txsPerCell > 1 && ` (${txsPerCell} tx/parcel)`}
+                        </div>
+                        {loadingTxs && (
+                            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Loading tx data...</span>
+                        )}
                     </div>
 
-                    {/* Metadata */}
-                    <div style={{ flex: 1, minWidth: '260px', display: 'flex', flexDirection: 'column', gap: 'var(--spacing-lg)' }}>
-                        <div>
-                            <h1
-                                style={{
-                                    fontSize: '28px',
-                                    fontWeight: 700,
-                                    color: 'var(--accent)',
-                                    marginBottom: '4px',
-                                    fontVariantNumeric: 'tabular-nums',
-                                }}
-                            >
-                                Block #{blockHeight.toLocaleString()}
-                            </h1>
-                            <p style={{ color: 'var(--text-muted)', fontSize: '12px' }}>
-                                On-chain BlockMap NFT
-                            </p>
-                        </div>
+                    <div
+                        style={{
+                            borderRadius: '12px',
+                            padding: '3px',
+                            background: selectedCell !== null
+                                ? 'linear-gradient(135deg, var(--accent), var(--accent-b), var(--accent-c))'
+                                : 'linear-gradient(135deg, rgba(247,147,26,0.3), rgba(255,204,0,0.3), rgba(255,107,0,0.3))',
+                            boxShadow: '0 0 40px var(--accent-20)',
+                            transition: 'background 300ms ease',
+                        }}
+                    >
+                        <InteractiveGrid
+                            blockHeight={blockHeight}
+                            hashHex={hashHex}
+                            txCount={txCount}
+                            txids={txids}
+                            selectedCell={selectedCell}
+                            onCellClick={handleCellClick}
+                        />
+                    </div>
+                </div>
 
-                        {/* Block data table */}
-                        <div className="glass-card" style={{ padding: '16px' }}>
+                {/* Block metadata */}
+                <div style={{ display: 'flex', gap: 'var(--spacing-xl)', flexWrap: 'wrap', alignItems: 'flex-start', marginBottom: 'var(--spacing-xl)' }}>
+                    {/* On-chain data (from contract) */}
+                    <div style={{ flex: 1, minWidth: '260px' }}>
+                        <div className="glass-card">
+                            <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 12 }}>
+                                On-Chain Data
+                            </div>
                             <table className="meta-table">
                                 <tbody>
                                     <tr>
                                         <td>Hash (first 16B)</td>
                                         <td>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                                <span className="code-text" style={{ fontSize: '11px' }}>
-                                                    {hashHex.slice(0, 32)}...
-                                                </span>
-                                                <CopyButton value={hashHex} />
-                                            </div>
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td>Transactions</td>
-                                        <td data-numeric style={{ fontVariantNumeric: 'tabular-nums' }}>
-                                            {data.txCount.toLocaleString()}
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td>Timestamp</td>
-                                        <td style={{ fontVariantNumeric: 'tabular-nums' }}>
-                                            {formatTimestamp(data.timestamp)}
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td>Difficulty</td>
-                                        <td data-numeric style={{ fontVariantNumeric: 'tabular-nums' }}>
-                                            {formatDifficulty(data.difficulty)}
+                                            <span className="code-text" style={{ fontSize: 11 }}>
+                                                {hashHex.slice(0, 16)}...
+                                            </span>
                                         </td>
                                     </tr>
                                     <tr>
                                         <td>Owner</td>
                                         <td>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                                <span className="code-text" style={{ fontSize: '11px' }}>
-                                                    {data.owner}
-                                                </span>
-                                                <CopyButton value={data.owner} />
-                                            </div>
+                                            <span className="code-text" style={{ fontSize: 11 }}>
+                                                {data.owner.slice(0, 12)}...
+                                            </span>
                                         </td>
                                     </tr>
+                                    {data.blockSize > 0n && (
+                                        <tr>
+                                            <td>Total Fees</td>
+                                            <td style={{ fontVariantNumeric: 'tabular-nums' }}>
+                                                {(Number(data.totalFees) / 1e8).toFixed(8)} BTC
+                                            </td>
+                                        </tr>
+                                    )}
+                                    {data.blockReward > 0n && (
+                                        <tr>
+                                            <td>Block Reward</td>
+                                            <td style={{ fontVariantNumeric: 'tabular-nums' }}>
+                                                {(Number(data.blockReward) / 1e8).toFixed(8)} BTC
+                                            </td>
+                                        </tr>
+                                    )}
                                 </tbody>
                             </table>
                         </div>
 
                         {/* Explorer links */}
-                        <div>
-                            <div
-                                style={{
-                                    fontSize: '11px',
-                                    color: 'var(--text-muted)',
-                                    textTransform: 'uppercase',
-                                    letterSpacing: '0.08em',
-                                    marginBottom: '8px',
-                                }}
-                            >
-                                Block on Mempool
-                            </div>
+                        <div style={{ marginTop: 'var(--spacing-md)', display: 'flex', flexDirection: 'column', gap: 8 }}>
                             <a
-                                href={mempoolBlockUrl(blockHeight)}
+                                href={`https://mempool.space/block/${hashHex}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="explorer-link"
                             >
-                                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                                <svg width="11" height="11" viewBox="0 0 12 12" fill="none" aria-hidden="true">
                                     <path d="M1 11L11 1M11 1H4M11 1V8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                                 </svg>
-                                View on Mempool.opnet.org
+                                View on Mempool.space
                             </a>
-                        </div>
-
-                        {/* OPScan link for contract */}
-                        <div>
-                            <div
-                                style={{
-                                    fontSize: '11px',
-                                    color: 'var(--text-muted)',
-                                    textTransform: 'uppercase',
-                                    letterSpacing: '0.08em',
-                                    marginBottom: '8px',
-                                }}
-                            >
-                                Contract on OPScan
-                            </div>
-                            <ExplorerLinks txid="" contractAddress={CONTRACT_ADDRESS} />
+                            <ExplorerLinks txid="" contractAddress={CONTRACT_ADDRESS_HEX} />
                         </div>
                     </div>
+
+                    {/* Extended block stats from mempool.space */}
+                    {enhancedBlock && (
+                        <div style={{ flex: 2, minWidth: '300px' }}>
+                            <BlockStatsCard data={enhancedBlock} />
+                        </div>
+                    )}
+
+                    {!enhancedBlock && (
+                        <div style={{ flex: 2, minWidth: '300px' }}>
+                            <div className="skeleton" style={{ height: 200, borderRadius: 8 }} />
+                        </div>
+                    )}
                 </div>
             </div>
+
+            {/* Tx detail panel */}
+            {activeTxid && (
+                <TxPanel txid={activeTxid} onClose={handlePanelClose} />
+            )}
         </div>
     );
 }

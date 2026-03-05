@@ -17,6 +17,10 @@ interface BlockMapsContractMethods {
         txCount: bigint,
         timestamp: bigint,
         difficulty: bigint,
+        blockSize: bigint,
+        blockWeight: bigint,
+        totalFees: bigint,
+        blockReward: bigint,
     ): Promise<Record<string, unknown>>;
     isMinted(blockHeight: bigint): Promise<Record<string, unknown>>;
     getBlockData(blockHeight: bigint): Promise<Record<string, unknown>>;
@@ -34,6 +38,10 @@ interface UseMintReturn {
         txCount: bigint,
         timestamp: bigint,
         difficulty: bigint,
+        blockSize: bigint,
+        blockWeight: bigint,
+        totalFees: bigint,
+        blockReward: bigint,
     ) => Promise<void>;
 }
 
@@ -92,9 +100,18 @@ export function useMint(): UseMintReturn {
         txCount: bigint,
         timestamp: bigint,
         difficulty: bigint,
+        blockSize: bigint,
+        blockWeight: bigint,
+        totalFees: bigint,
+        blockReward: bigint,
     ): Promise<void> => {
         if (!address) {
             setMintError('Wallet not connected');
+            return;
+        }
+
+        if (!walletAddress) {
+            setMintError('Wallet address not resolved. Please wait and retry.');
             return;
         }
 
@@ -118,6 +135,10 @@ export function useMint(): UseMintReturn {
                 txCount,
                 timestamp,
                 difficulty,
+                blockSize,
+                blockWeight,
+                totalFees,
+                blockReward,
             );
 
             if ('error' in sim) {
@@ -133,15 +154,13 @@ export function useMint(): UseMintReturn {
                 signer: null;
                 mldsaSigner: null;
                 refundTo: string;
-                maximumAllowedSatToSpend: bigint;
                 network: typeof NETWORK;
             }) => Promise<Record<string, unknown>>;
 
             const receipt = await sendFn({
                 signer: null,
                 mldsaSigner: null,
-                refundTo: walletAddress ?? '',
-                maximumAllowedSatToSpend: 100000n,
+                refundTo: walletAddress,
                 network: NETWORK,
             });
 
@@ -183,7 +202,7 @@ export function useIsMinted(): UseIsMintedReturn {
     return { isMinted, checkingMinted, checkMinted };
 }
 
-/** Hook to fetch on-chain stored block data. */
+/** Hook to fetch on-chain stored block data (includes new fields). */
 export function useGetBlockData(): UseGetBlockDataReturn {
     const [mintedBlockData, setMintedBlockData] = useState<MintedBlockData | null>(null);
     const [loadingMintedData, setLoadingMintedData] = useState(false);
@@ -201,6 +220,10 @@ export function useGetBlockData(): UseGetBlockDataReturn {
                 timestamp: bigint;
                 difficulty: bigint;
                 owner: string;
+                blockSize: bigint;
+                blockWeight: bigint;
+                totalFees: bigint;
+                blockReward: bigint;
             };
 
             const data: MintedBlockData = {
@@ -209,6 +232,10 @@ export function useGetBlockData(): UseGetBlockDataReturn {
                 timestamp: decoded.timestamp,
                 difficulty: decoded.difficulty,
                 owner: decoded.owner,
+                blockSize: decoded.blockSize ?? 0n,
+                blockWeight: decoded.blockWeight ?? 0n,
+                totalFees: decoded.totalFees ?? 0n,
+                blockReward: decoded.blockReward ?? 0n,
             };
             setMintedBlockData(data);
             return data;
