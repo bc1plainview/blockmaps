@@ -128,11 +128,6 @@ export class BlockMaps extends OP721 {
         const totalFees: u64 = calldata.readU64();
         const blockReward: u64 = calldata.readU64();
 
-        // Only past or current blocks can be minted
-        if (blockHeight > Blockchain.block.number) {
-            throw new Revert('Block has not been mined yet');
-        }
-
         if (blockHash16 == u256.Zero) {
             throw new Revert('Block hash cannot be zero');
         }

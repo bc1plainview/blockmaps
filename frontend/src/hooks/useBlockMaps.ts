@@ -260,7 +260,8 @@ export function useTotalMinted(): UseTotalMintedReturn {
             const contract = getReadContract();
             const result = await contract.totalMinted();
             if ('error' in result) return null;
-            const total = result.decoded as bigint;
+            const total = result.decoded as bigint | undefined;
+            if (total === undefined || total === null) return null;
             setTotalMinted(total);
             return total;
         } catch {

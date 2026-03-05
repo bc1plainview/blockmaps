@@ -52,7 +52,7 @@ export function MintPage(): React.ReactElement {
                                 <span className="skeleton" style={{ display: 'inline-block', width: '60px', height: '14px', borderRadius: '3px' }} />
                             ) : (
                                 <strong data-numeric style={{ fontVariantNumeric: 'tabular-nums' }}>
-                                    {totalMinted !== null ? totalMinted.toLocaleString() : '—'}
+                                    {totalMinted != null ? totalMinted.toLocaleString() : '—'}
                                 </strong>
                             )}
                             &nbsp;blocks minted
