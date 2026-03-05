@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, existsSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -8,6 +8,7 @@ import {
     TransactionFactory,
     OPNetLimitedProvider,
     ChallengeSolution,
+    MLDSASecurityLevel,
 } from '@btc-vision/transaction';
 import { networks } from '@btc-vision/bitcoin';
 import { JSONRpcProvider } from 'opnet';
@@ -19,6 +20,13 @@ const RPC_URL = 'https://testnet.opnet.org';
 const WASM_PATH = resolve(__dirname, '../build/BlockMaps.wasm');
 const WALLET_PATH = resolve(__dirname, '../.wallet.json');
 const RECEIPT_PATH = resolve(__dirname, '../../.claude/loop/sessions/onchain-bitmaps/artifacts/deployment/receipt.json');
+
+function loadWallet() {
+    const walletData = JSON.parse(readFileSync(WALLET_PATH, 'utf8'));
+    const mnemonic = new Mnemonic(walletData.phrase, '', NETWORK, MLDSASecurityLevel.LEVEL2);
+    const wallet = mnemonic.derive(0);
+    return { mnemonic, wallet, walletData };
+}
 
 async function generateWallet(): Promise<void> {
     if (existsSync(WALLET_PATH)) {
@@ -34,6 +42,7 @@ async function generateWallet(): Promise<void> {
         MnemonicStrength.MAXIMUM,
         '',
         NETWORK,
+        MLDSASecurityLevel.LEVEL2,
     );
 
     const wallet = mnemonic.derive(0);
@@ -51,6 +60,7 @@ async function generateWallet(): Promise<void> {
     console.log('Address (P2TR):', wallet.p2tr);
     console.log('Wallet saved to:', WALLET_PATH);
     console.log('\nFund this address with testnet BTC before deploying.');
+    console.log('Then run: npx tsx scripts/deploy.ts link');
     console.log('Then run: npx tsx scripts/deploy.ts deploy');
 
     mnemonic.zeroize();
@@ -77,6 +87,76 @@ async function checkBalance(): Promise<bigint> {
     }
 }
 
+async function linkMLDSA(): Promise<void> {
+    if (!existsSync(WALLET_PATH)) {
+        console.error('No wallet found. Run: npx tsx scripts/deploy.ts generate');
+        process.exit(1);
+    }
+
+    const { mnemonic, wallet } = loadWallet();
+    console.log('\n=== Linking ML-DSA Key to Address ===');
+    console.log('Address:', wallet.p2tr);
+
+    const limitedProvider = new OPNetLimitedProvider(RPC_URL);
+
+    // Fetch UTXOs
+    let utxos;
+    try {
+        utxos = await limitedProvider.fetchUTXO({
+            address: wallet.p2tr,
+            minAmount: 330n,
+            requestedAmount: 50_000n,
+        });
+    } catch (err) {
+        console.error('Failed to fetch UTXOs:', err instanceof Error ? err.message : err);
+        mnemonic.zeroize();
+        wallet.zeroize();
+        process.exit(1);
+    }
+
+    const totalSats = utxos.reduce((sum, u) => sum + u.value, 0n);
+    console.log(`Found ${utxos.length} UTXOs, total: ${totalSats} sats`);
+
+    // Send a self-transfer with linkMLDSAPublicKeyToAddress: true
+    console.log('\nSending ML-DSA key linking transaction...');
+    const factory = new TransactionFactory();
+
+    const result = await factory.createBTCTransfer({
+        signer: wallet.keypair,
+        mldsaSigner: wallet.mldsaKeypair,
+        network: NETWORK,
+        from: wallet.p2tr,
+        to: wallet.p2tr,
+        amount: 1000n,
+        utxos: utxos,
+        linkMLDSAPublicKeyToAddress: true,
+        revealMLDSAPublicKey: true,
+        feeRate: 2,
+        priorityFee: 330n,
+        gasSatFee: 330n,
+    });
+
+    console.log('Broadcasting linking transaction...');
+    const broadcastResult = await limitedProvider.broadcastTransaction(
+        result.transaction,
+        false,
+    );
+
+    if (!broadcastResult?.success) {
+        console.error('Linking TX failed:', broadcastResult?.error ?? 'unknown error');
+        mnemonic.zeroize();
+        wallet.zeroize();
+        process.exit(1);
+    }
+
+    console.log('Linking TX:', broadcastResult.result);
+    console.log('\n=== ML-DSA Key Linked ===');
+    console.log('Wait for confirmation, then run: npx tsx scripts/deploy.ts deploy');
+
+    mnemonic.zeroize();
+    wallet.zeroize();
+}
+
 async function deploy(): Promise<void> {
     if (!existsSync(WALLET_PATH)) {
         console.error('No wallet found. Run: npx tsx scripts/deploy.ts generate');
@@ -88,14 +168,10 @@ async function deploy(): Promise<void> {
         process.exit(1);
     }
 
-    const walletData = JSON.parse(readFileSync(WALLET_PATH, 'utf8'));
+    const { mnemonic, wallet } = loadWallet();
     console.log('\n=== Deploying BlockMaps Contract ===');
     console.log('Network: OPNet Testnet');
-    console.log('Deployer:', walletData.p2tr);
-
-    // Restore wallet from mnemonic
-    const mnemonic = new Mnemonic(walletData.phrase, '', NETWORK);
-    const wallet = mnemonic.derive(0);
+    console.log('Deployer:', wallet.p2tr);
 
     // Load bytecode
     const bytecode = new Uint8Array(readFileSync(WASM_PATH));
@@ -142,6 +218,7 @@ async function deploy(): Promise<void> {
         bytecode: bytecode,
         utxos: utxos,
         challenge: challenge as unknown as ChallengeSolution,
+        linkMLDSAPublicKeyToAddress: true,
         feeRate: 2,
         priorityFee: 330n,
         gasSatFee: 330n,
@@ -198,7 +275,6 @@ async function deploy(): Promise<void> {
     // Ensure receipt directory exists
     const receiptDir = dirname(RECEIPT_PATH);
     if (!existsSync(receiptDir)) {
-        const { mkdirSync } = await import('fs');
         mkdirSync(receiptDir, { recursive: true });
     }
     writeFileSync(RECEIPT_PATH, JSON.stringify(receipt, null, 2));
@@ -224,9 +300,12 @@ switch (command) {
     case 'balance':
         await checkBalance();
         break;
+    case 'link':
+        await linkMLDSA();
+        break;
     case 'deploy':
         await deploy();
         break;
     default:
-        console.log('Usage: npx tsx scripts/deploy.ts [generate|balance|deploy]');
+        console.log('Usage: npx tsx scripts/deploy.ts [generate|balance|link|deploy]');
 }
