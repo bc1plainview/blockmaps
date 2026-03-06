@@ -15,11 +15,9 @@ function gridDimForTxCount(txCount: number): number {
 
 interface BlockScene3DProps {
     blockHeight: bigint;
-    hashHex: string;
     txCount: number;
     txids?: string[];
     txWeights?: Array<TxWeightData | null>;
-    feeRateRange?: { min: number; max: number };
     selectedCell: number | null;
     onCellClick: (cellIndex: number) => void;
 }
@@ -82,19 +80,41 @@ function InstancedColumns({
         if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
     }, [columnData]);
 
-    // Highlight selected cell with emissive boost
+    // Highlight selected cell by overriding its instance color to bright accent.
+    // On deselect, restore the original color from columnData.
+    const prevSelected = useRef<number | null>(null);
+    const highlightColor = useMemo(() => new THREE.Color('#f7931a'), []);
+
     useFrame(() => {
         const mesh = meshRef.current;
-        if (!mesh) return;
-        const mat = mesh.material as THREE.MeshStandardMaterial;
-        if (selectedCell !== null && selectedCell < columnData.count) {
-            mat.emissive.set('#f7931a');
-            mat.emissiveIntensity = 0.4;
-        } else {
-            mat.emissive.set('#000000');
-            mat.emissiveIntensity = 0;
+        if (!mesh || !mesh.instanceColor) return;
+
+        // Restore previous selection's color
+        if (prevSelected.current !== null && prevSelected.current !== selectedCell) {
+            const idx = prevSelected.current;
+            if (idx < columnData.count) {
+                const orig = new THREE.Color(
+                    columnData.colors[idx * 3],
+                    columnData.colors[idx * 3 + 1],
+                    columnData.colors[idx * 3 + 2],
+                );
+                mesh.setColorAt(idx, orig);
+                mesh.instanceColor.needsUpdate = true;
+            }
         }
+
+        // Apply highlight to current selection
+        if (selectedCell !== null && selectedCell < columnData.count) {
+            mesh.setColorAt(selectedCell, highlightColor);
+            mesh.instanceColor.needsUpdate = true;
+        }
+
+        prevSelected.current = selectedCell;
     });
+
+    // Reusable temp objects for pointer move (avoid GC pressure)
+    const tmpMat = useRef(new THREE.Matrix4());
+    const tmpVec = useRef(new THREE.Vector3());
 
     const handlePointerMove = useCallback((e: ThreeEvent<PointerEvent>): void => {
         e.stopPropagation();
@@ -109,14 +129,12 @@ function InstancedColumns({
         const txid = txids[id] ?? null;
 
         // Project 3D position to screen space for tooltip placement
-        const instanceMat = new THREE.Matrix4();
-        meshRef.current?.getMatrixAt(id, instanceMat);
-        const worldPos = new THREE.Vector3();
-        worldPos.setFromMatrixPosition(instanceMat);
+        meshRef.current?.getMatrixAt(id, tmpMat.current);
+        tmpVec.current.setFromMatrixPosition(tmpMat.current);
 
         const canvas = gl.domElement;
         const rect = canvas.getBoundingClientRect();
-        const ndc = worldPos.clone().project(camera);
+        const ndc = tmpVec.current.clone().project(camera);
         const screenX = ((ndc.x + 1) / 2) * rect.width + rect.left;
         const screenY = ((-ndc.y + 1) / 2) * rect.height + rect.top;
 

@@ -41,7 +41,7 @@ export function DetailPage(): React.ReactElement {
     const { mintedBlockData, loadingMintedData, fetchMintedBlockData } = useGetBlockData();
     const { fetchEnhancedBlock } = useBlockData();
     const { txids, loading: loadingTxs, fetchTxids } = useBlockTxs();
-    const { txWeights, feeRateRange, fetchWeights } = useBlockTxWeights();
+    const { txWeights, fetchWeights } = useBlockTxWeights();
 
     const [error, setError] = useState<string | null>(null);
     const [selectedCell, setSelectedCell] = useState<number | null>(null);
@@ -88,10 +88,16 @@ export function DetailPage(): React.ReactElement {
     const handleCellClick = useCallback((cellIndex: number): void => {
         setSelectedCell(cellIndex);
 
-        // Determine which txid(s) this cell represents
-        const txCount = mintedBlockData ? Number(mintedBlockData.txCount) : 0;
-        const txsPerCell = Math.ceil(txCount / 256);
-        const txStart = cellIndex * txsPerCell;
+        // In 3D mode, cellIndex maps 1:1 to transaction index.
+        // In 2D mode, multiple txs may share a cell (16x16 = 256 cells).
+        const txCountNum = mintedBlockData ? Number(mintedBlockData.txCount) : 0;
+        let txStart: number;
+        if (viewMode === '3d') {
+            txStart = cellIndex;
+        } else {
+            const txsPerCell = Math.ceil(txCountNum / 256);
+            txStart = cellIndex * txsPerCell;
+        }
         const txid = txids[txStart] ?? null;
 
         if (txid) {
@@ -99,7 +105,7 @@ export function DetailPage(): React.ReactElement {
         } else {
             setActiveTxid(null);
         }
-    }, [mintedBlockData, txids]);
+    }, [mintedBlockData, txids, viewMode]);
 
     const handlePanelClose = useCallback((): void => {
         setActiveTxid(null);
@@ -220,11 +226,9 @@ export function DetailPage(): React.ReactElement {
                         <Suspense fallback={<Scene3DSkeleton />}>
                             <BlockScene3D
                                 blockHeight={blockHeight}
-                                hashHex={hashHex}
                                 txCount={txCount}
                                 txids={txids}
                                 txWeights={txWeights}
-                                feeRateRange={feeRateRange}
                                 selectedCell={selectedCell}
                                 onCellClick={handleCellClick}
                             />
