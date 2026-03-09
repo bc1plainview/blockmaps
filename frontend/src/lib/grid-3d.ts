@@ -1,15 +1,14 @@
 import * as THREE from 'three';
+import type { TxWeightData } from '../hooks/useBlockTxWeights.js';
 
 // Weight range: 200 WU (coinbase/tiny) to 10,000 WU (large)
-// Height: 200 WU → 0.3, 1000 WU → 1.0, 10000 WU → 3.0
 const MIN_WEIGHT = 200;
 const MAX_WEIGHT = 10_000;
 
-// log1p(200) ≈ 5.298, log1p(10000) ≈ 9.210
 const LOG_MIN = Math.log1p(MIN_WEIGHT);
 const LOG_MAX = Math.log1p(MAX_WEIGHT);
-const HEIGHT_MIN = 0.3;
-const HEIGHT_MAX = 3.0;
+const HEIGHT_MIN = 0.5;
+const HEIGHT_MAX = 5.0;
 
 export function weightToHeight(weight: number): number {
     const clamped = Math.max(MIN_WEIGHT, Math.min(MAX_WEIGHT, weight));
@@ -17,18 +16,42 @@ export function weightToHeight(weight: number): number {
     return HEIGHT_MIN + t * (HEIGHT_MAX - HEIGHT_MIN);
 }
 
-// 3D fee-rate palette stops (fee rate in sat/vB → hex color)
-// Ordered from cold to hot for linear interpolation
-const FEE_STOPS: Array<{ rate: number; color: THREE.Color }> = [
-    { rate: 1,   color: new THREE.Color('#1a1a4e') },
-    { rate: 5,   color: new THREE.Color('#3d2b7a') },
-    { rate: 20,  color: new THREE.Color('#cc7000') },
-    { rate: 50,  color: new THREE.Color('#f7931a') },
-    { rate: 100, color: new THREE.Color('#ffcc00') },
-    { rate: 200, color: new THREE.Color('#fff5cc') },
+// 3D WEIGHT-based palette — matches the 2D heat palette approach.
+// Weight varies hugely within a block; fee rate does not. Weight = visual variety.
+const WEIGHT_PALETTE: THREE.Color[] = [
+    new THREE.Color('#cc6600'),  // 200 WU — light tx, deep orange
+    new THREE.Color('#e07000'),
+    new THREE.Color('#ee8000'),
+    new THREE.Color('#f7931a'),  // ~1000 WU — bitcoin orange
+    new THREE.Color('#ffaa33'),
+    new THREE.Color('#ffbb44'),
+    new THREE.Color('#ffcc55'),
+    new THREE.Color('#ffdd66'),  // ~3000 WU — gold
+    new THREE.Color('#ffee88'),
+    new THREE.Color('#fff5aa'),
+    new THREE.Color('#ffffcc'),  // 10000 WU — near-white gold
 ];
 
-// Log-scale fee rate to [0,1], then map to palette
+export function weightToColor3D(weight: number): THREE.Color {
+    const clamped = Math.max(MIN_WEIGHT, Math.min(MAX_WEIGHT, weight));
+    const t = (Math.log1p(clamped) - LOG_MIN) / (LOG_MAX - LOG_MIN);
+    const idx = t * (WEIGHT_PALETTE.length - 1);
+    const lo = Math.floor(idx);
+    const hi = Math.min(lo + 1, WEIGHT_PALETTE.length - 1);
+    const frac = idx - lo;
+    return WEIGHT_PALETTE[lo].clone().lerp(WEIGHT_PALETTE[hi], frac);
+}
+
+// Keep feeRateToColor3D for the tooltip display
+const FEE_STOPS: Array<{ rate: number; color: THREE.Color }> = [
+    { rate: 1,   color: new THREE.Color('#e68a00') },
+    { rate: 5,   color: new THREE.Color('#f7931a') },
+    { rate: 20,  color: new THREE.Color('#ffaa33') },
+    { rate: 50,  color: new THREE.Color('#ffcc44') },
+    { rate: 100, color: new THREE.Color('#ffee66') },
+    { rate: 200, color: new THREE.Color('#fffff0') },
+];
+
 export function feeRateToColor3D(feeRate: number): THREE.Color {
     const clamped = Math.max(1, Math.min(200, feeRate));
     const logRate = Math.log1p(clamped);
@@ -36,7 +59,6 @@ export function feeRateToColor3D(feeRate: number): THREE.Color {
     const logMax = Math.log1p(200);
     const t = (logRate - logMin) / (logMax - logMin);
 
-    // Find the two palette stops to interpolate between
     for (let i = 0; i < FEE_STOPS.length - 1; i++) {
         const lo = FEE_STOPS[i];
         const hi = FEE_STOPS[i + 1];
@@ -51,16 +73,11 @@ export function feeRateToColor3D(feeRate: number): THREE.Color {
         }
     }
 
-    // Clamp to last color
     const last = FEE_STOPS[FEE_STOPS.length - 1];
     return last !== undefined ? last.color.clone() : new THREE.Color('#fff5cc');
 }
 
-export interface TxWeightData {
-    fee: number;
-    weight: number;
-    size: number;
-}
+export type { TxWeightData };
 
 export interface ColumnData {
     matrices: Float32Array;
@@ -68,8 +85,8 @@ export interface ColumnData {
     count: number;
 }
 
-// Build per-instance transform matrices and colors for InstancedMesh.
-// Layout: row-major, columns spaced 1.2 units apart on X and Z.
+// Build per-instance transform matrices and colors.
+// COLOR = weight (rich variety within a block), HEIGHT = weight, matching 2D approach.
 export function buildColumnData(
     txWeights: Array<TxWeightData | null>,
     txCount: number,
@@ -80,24 +97,19 @@ export function buildColumnData(
     const colors = new Float32Array(count * 3);
 
     const spacing = 1.2;
-    // Center the grid around origin
     const offset = ((gridDim - 1) * spacing) / 2;
 
     const mat = new THREE.Matrix4();
     const pos = new THREE.Vector3();
     const scale = new THREE.Vector3();
-    const quat = new THREE.Quaternion(); // identity rotation
+    const quat = new THREE.Quaternion();
 
     for (let i = 0; i < count; i++) {
         const row = Math.floor(i / gridDim);
         const col = i % gridDim;
         const txData = txWeights[i];
 
-        const weight = txData?.weight ?? 1000; // fallback to 1000 WU
-        const fee = txData?.fee ?? 0;
-        const vsize = txData?.size ?? Math.ceil(weight / 4);
-        const feeRate = vsize > 0 ? fee / vsize : 1;
-
+        const weight = txData?.weight ?? 1000;
         const height = weightToHeight(weight);
 
         pos.set(col * spacing - offset, height / 2, row * spacing - offset);
@@ -105,12 +117,12 @@ export function buildColumnData(
         mat.compose(pos, quat, scale);
         mat.toArray(matrices, i * 16);
 
-        // Coinbase tx (index 0) = green
+        // Color by WEIGHT (not fee rate) — matches the 2D heat map
         let color: THREE.Color;
         if (i === 0) {
-            color = new THREE.Color('#22c55e');
+            color = new THREE.Color('#4ade80'); // coinbase green
         } else {
-            color = feeRateToColor3D(feeRate);
+            color = weightToColor3D(weight);
         }
 
         colors[i * 3] = color.r;
@@ -121,9 +133,9 @@ export function buildColumnData(
     return { matrices, colors, count };
 }
 
-// Camera position at 45° looking at block center, backed away based on grid size
+// Camera: low angle for dramatic cityscape view
 export function defaultCameraPosition(gridDim: number): [number, number, number] {
     const extent = gridDim * 1.2;
-    // Position at 45° elevation, offset on X and Z
-    return [extent * 0.7, extent * 0.6, extent * 0.7];
+    // Low elevation angle — see the skyline, not the rooftops
+    return [extent * 0.8, extent * 0.35, extent * 0.8];
 }

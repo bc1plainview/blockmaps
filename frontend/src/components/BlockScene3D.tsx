@@ -5,7 +5,6 @@ import * as THREE from 'three';
 import { buildColumnData, defaultCameraPosition, feeRateToColor3D } from '../lib/grid-3d.js';
 import type { TxWeightData } from '../lib/grid-3d.js';
 
-// Resolve grid dimension from tx count (matches 2D algorithm)
 function gridDimForTxCount(txCount: number): number {
     if (txCount <= 64) return 8;
     if (txCount <= 256) return 16;
@@ -60,10 +59,10 @@ function InstancedColumns({
         [txWeights, txCount, gridDim],
     );
 
-    // Apply matrices and colors once data changes
+    // Apply matrices + per-instance color attribute
     useEffect(() => {
         const mesh = meshRef.current;
-        if (!mesh) return;
+        if (!mesh || !mesh.geometry) return;
 
         const { matrices, colors, count } = columnData;
         const mat = new THREE.Matrix4();
@@ -71,48 +70,43 @@ function InstancedColumns({
         for (let i = 0; i < count; i++) {
             mat.fromArray(matrices, i * 16);
             mesh.setMatrixAt(i, mat);
-
-            const color = new THREE.Color(colors[i * 3], colors[i * 3 + 1], colors[i * 3 + 2]);
-            mesh.setColorAt(i, color);
         }
-
         mesh.instanceMatrix.needsUpdate = true;
-        if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+
+        // InstancedBufferAttribute — reliable per-instance color path
+        const colorAttr = new THREE.InstancedBufferAttribute(new Float32Array(colors), 3);
+        mesh.geometry.setAttribute('color', colorAttr);
     }, [columnData]);
 
-    // Highlight selected cell by overriding its instance color to bright accent.
-    // On deselect, restore the original color from columnData.
+    // Highlight selected cell
     const prevSelected = useRef<number | null>(null);
-    const highlightColor = useMemo(() => new THREE.Color('#f7931a'), []);
 
     useFrame(() => {
         const mesh = meshRef.current;
-        if (!mesh || !mesh.instanceColor) return;
+        if (!mesh) return;
+        const attr = mesh.geometry.getAttribute('color') as THREE.InstancedBufferAttribute | undefined;
+        if (!attr) return;
 
-        // Restore previous selection's color
         if (prevSelected.current !== null && prevSelected.current !== selectedCell) {
             const idx = prevSelected.current;
             if (idx < columnData.count) {
-                const orig = new THREE.Color(
-                    columnData.colors[idx * 3],
-                    columnData.colors[idx * 3 + 1],
-                    columnData.colors[idx * 3 + 2],
-                );
-                mesh.setColorAt(idx, orig);
-                mesh.instanceColor.needsUpdate = true;
+                attr.array[idx * 3] = columnData.colors[idx * 3];
+                attr.array[idx * 3 + 1] = columnData.colors[idx * 3 + 1];
+                attr.array[idx * 3 + 2] = columnData.colors[idx * 3 + 2];
+                attr.needsUpdate = true;
             }
         }
 
-        // Apply highlight to current selection
         if (selectedCell !== null && selectedCell < columnData.count) {
-            mesh.setColorAt(selectedCell, highlightColor);
-            mesh.instanceColor.needsUpdate = true;
+            attr.array[selectedCell * 3] = 1.0;
+            attr.array[selectedCell * 3 + 1] = 1.0;
+            attr.array[selectedCell * 3 + 2] = 1.0;
+            attr.needsUpdate = true;
         }
 
         prevSelected.current = selectedCell;
     });
 
-    // Reusable temp objects for pointer move (avoid GC pressure)
     const tmpMat = useRef(new THREE.Matrix4());
     const tmpVec = useRef(new THREE.Vector3());
 
@@ -124,11 +118,10 @@ function InstancedColumns({
         const txData = txWeights[id];
         const weight = txData?.weight ?? 1000;
         const fee = txData?.fee ?? 0;
-        const vsize = txData?.size ?? Math.ceil(weight / 4);
-        const feeRate = vsize > 0 ? fee / vsize : 1;
+        const vsize = weight > 0 ? weight / 4 : 1;
+        const feeRate = fee / vsize;
         const txid = txids[id] ?? null;
 
-        // Project 3D position to screen space for tooltip placement
         meshRef.current?.getMatrixAt(id, tmpMat.current);
         tmpVec.current.setFromMatrixPosition(tmpMat.current);
 
@@ -145,11 +138,23 @@ function InstancedColumns({
         onHover(null);
     }, [onHover]);
 
-    const handleClick = useCallback((e: ThreeEvent<MouseEvent>): void => {
-        e.stopPropagation();
-        const id = e.instanceId;
-        if (id !== undefined && id < columnData.count) {
-            onCellClick(id);
+    const pointerDownPos = useRef<{ x: number; y: number } | null>(null);
+
+    const handlePointerDown = useCallback((e: ThreeEvent<PointerEvent>): void => {
+        pointerDownPos.current = { x: e.clientX, y: e.clientY };
+    }, []);
+
+    const handlePointerUp = useCallback((e: ThreeEvent<PointerEvent>): void => {
+        if (!pointerDownPos.current) return;
+        const dx = Math.abs(e.clientX - pointerDownPos.current.x);
+        const dy = Math.abs(e.clientY - pointerDownPos.current.y);
+        pointerDownPos.current = null;
+
+        if (dx + dy < 5) {
+            const id = e.instanceId;
+            if (id !== undefined && id < columnData.count) {
+                onCellClick(id);
+            }
         }
     }, [columnData.count, onCellClick]);
 
@@ -161,12 +166,11 @@ function InstancedColumns({
             args={[undefined, undefined, columnData.count]}
             onPointerMove={handlePointerMove}
             onPointerOut={handlePointerOut}
-            onClick={handleClick}
-            castShadow
-            receiveShadow
+            onPointerDown={handlePointerDown}
+            onPointerUp={handlePointerUp}
         >
             <boxGeometry args={[1, 1, 1]} />
-            <meshStandardMaterial vertexColors roughness={0.6} metalness={0.1} />
+            <meshLambertMaterial vertexColors emissive="#442200" emissiveIntensity={0.3} />
         </instancedMesh>
     );
 }
@@ -177,14 +181,12 @@ function Ground({ gridDim }: { gridDim: number }): React.ReactElement {
     const size = gridDim * 1.2 + 4;
     return (
         <>
-            {/* Solid ground */}
-            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.01, 0]} receiveShadow>
+            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.01, 0]}>
                 <planeGeometry args={[size, size]} />
-                <meshStandardMaterial color="#0a0a18" roughness={0.9} metalness={0} />
+                <meshLambertMaterial color="#181828" />
             </mesh>
-            {/* Grid lines */}
             <gridHelper
-                args={[size, gridDim, '#1a1a3a', '#0f0f22']}
+                args={[size, gridDim, '#443300', '#221800']}
                 position={[0, 0, 0]}
             />
         </>
@@ -303,15 +305,12 @@ function Scene({
     return (
         <>
             <CameraFramer gridDim={gridDim} shouldReset={shouldReset} onResetDone={onResetDone} />
-            <fog attach="fog" args={['#020208', maxDist * 0.6, maxDist * 1.4]} />
-            <ambientLight intensity={0.4} />
-            <directionalLight
-                position={[10, 20, 10]}
-                intensity={1.2}
-                castShadow
-                shadow-mapSize={[1024, 1024]}
-            />
-            <directionalLight position={[-8, 12, -8]} intensity={0.3} color="#3333aa" />
+
+            {/* Lighting: bright ambient + strong directional for shading depth */}
+            <ambientLight intensity={1.2} />
+            <directionalLight position={[10, 20, 10]} intensity={2.5} />
+            <directionalLight position={[-5, 15, -5]} intensity={1.0} color="#ffaa44" />
+
             <Ground gridDim={gridDim} />
             <InstancedColumns
                 txCount={txCount}
@@ -323,8 +322,8 @@ function Scene({
                 onHover={onHover}
             />
             <OrbitControls
-                minPolarAngle={Math.PI / 18}
-                maxPolarAngle={(Math.PI * 8) / 18}
+                minPolarAngle={Math.PI / 12}
+                maxPolarAngle={(Math.PI * 7) / 16}
                 minDistance={minDist}
                 maxDistance={maxDist}
                 enableDamping
@@ -367,18 +366,17 @@ export function BlockScene3D({
                 position: 'relative',
                 width: '100%',
                 aspectRatio: '16/9',
-                background: '#020208',
+                background: '#0a0a18',
                 border: '1px solid rgba(247,147,26,0.15)',
             }}
             aria-label={`3D block visualization for block #${blockHeight.toString()}`}
         >
             <Canvas
                 camera={{ fov: 50, near: 0.1, far: 1000 }}
-                shadows
                 gl={{ antialias: true, alpha: false }}
                 style={{ width: '100%', height: '100%' }}
             >
-                <color attach="background" args={['#020208']} />
+                <color attach="background" args={['#0a0a18']} />
                 <Scene
                     txCount={txCount}
                     txWeights={txWeights}
@@ -392,7 +390,7 @@ export function BlockScene3D({
                 />
             </Canvas>
 
-            {/* Reset view button — HTML overlay */}
+            {/* Reset view button */}
             <button
                 type="button"
                 onClick={handleReset}
@@ -425,15 +423,14 @@ export function BlockScene3D({
                     left: 12,
                     fontFamily: "'Press Start 2P', monospace",
                     fontSize: 6,
-                    color: 'rgba(255,255,255,0.4)',
+                    color: 'rgba(255,255,255,0.5)',
                     lineHeight: 1.8,
                     pointerEvents: 'none',
                     zIndex: 10,
                 }}
             >
-                <div>Height = tx weight</div>
-                <div>Color = fee rate</div>
-                <div style={{ color: '#22c55e', marginTop: 2 }}>Green = coinbase</div>
+                <div>Height + Color = tx weight</div>
+                <div style={{ color: '#4ade80', marginTop: 2 }}>Green = coinbase</div>
             </div>
 
             {/* Hover tooltip */}

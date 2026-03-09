@@ -1,37 +1,21 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { BlockMapCard } from '../components/BlockMapCard.js';
 import { SkeletonCard } from '../components/SkeletonCard.js';
 import { useGetBlockData } from '../hooks/useBlockMaps.js';
+import { discoverMintedBlocks } from '../lib/block-discovery.js';
+import { hash16ToHex } from '../lib/format.js';
 import type { MintedBlockData } from '../types/index.js';
-
-// Reconstruct hash hex from stored hash16 bigint
-// hash16 is the first 16 bytes of the block hash stored as a u256
-function hash16ToHex(hash16: bigint): string {
-    const hex = hash16.toString(16).padStart(32, '0');
-    // Pad to 64 chars (32 bytes) — remaining bytes are zero
-    return hex.padEnd(64, '0');
-}
 
 interface GalleryEntry {
     blockHeight: bigint;
     data: MintedBlockData;
 }
 
-// Known minted blocks + popular heights to probe
-const PROBE_HEIGHTS: bigint[] = [
-    111111n,
-    500000n,
-    630000n,
-    700000n,
-    750000n,
-    800000n,
-    840000n,
-];
-
 export function GalleryPage(): React.ReactElement {
     const { fetchMintedBlockData } = useGetBlockData();
     const [entries, setEntries] = useState<GalleryEntry[]>([]);
     const [loading, setLoading] = useState(true);
+    const [scanProgress, setScanProgress] = useState<{ found: number; total: number } | null>(null);
 
     const [searchInput, setSearchInput] = useState('');
     const [searchHeight, setSearchHeight] = useState<bigint | null>(null);
@@ -39,33 +23,45 @@ export function GalleryPage(): React.ReactElement {
     const [searching, setSearching] = useState(false);
     const [notFound, setNotFound] = useState(false);
 
+    const cancelledRef = useRef(false);
+
     useEffect(() => {
-        let cancelled = false;
+        cancelledRef.current = false;
+
         const loadGallery = async (): Promise<void> => {
             setLoading(true);
-            const results: GalleryEntry[] = [];
+            setScanProgress(null);
 
-            for (const height of PROBE_HEIGHTS) {
-                if (cancelled) return;
-                try {
-                    const data = await fetchMintedBlockData(height);
-                    if (data && data.owner && data.owner !== '0x' && data.hash16 !== 0n) {
-                        results.push({ blockHeight: height, data });
-                    }
-                } catch {
-                    // Block not minted — skip
+            try {
+                const result = await discoverMintedBlocks((found, total, partialBlocks) => {
+                    if (cancelledRef.current) return;
+                    setScanProgress({ found, total });
+                    // Progressive rendering: show blocks as they're found
+                    setEntries((prev) => {
+                        const existing = new Set(prev.map((e) => e.blockHeight));
+                        const newEntries = partialBlocks.filter((b) => !existing.has(b.blockHeight));
+                        if (newEntries.length === 0) return prev;
+                        return [...prev, ...newEntries].sort((a, b) =>
+                            a.blockHeight < b.blockHeight ? -1 : a.blockHeight > b.blockHeight ? 1 : 0,
+                        );
+                    });
+                });
+
+                if (!cancelledRef.current) {
+                    setEntries(result.blocks);
+                    setScanProgress({ found: result.totalFound, total: result.totalMinted });
+                    setLoading(false);
                 }
-            }
-
-            if (!cancelled) {
-                setEntries(results);
-                setLoading(false);
+            } catch {
+                if (!cancelledRef.current) {
+                    setLoading(false);
+                }
             }
         };
 
         void loadGallery();
-        return (): void => { cancelled = true; };
-    }, [fetchMintedBlockData]);
+        return (): void => { cancelledRef.current = true; };
+    }, []);
 
     const handleSearch = useCallback(async (): Promise<void> => {
         const str = searchInput.trim();
@@ -171,6 +167,35 @@ export function GalleryPage(): React.ReactElement {
                     )}
                 </div>
 
+                {/* Scan progress */}
+                {loading && scanProgress && (
+                    <p
+                        style={{
+                            color: 'var(--text-muted)',
+                            fontSize: '12px',
+                            marginBottom: 'var(--spacing-md)',
+                            fontVariantNumeric: 'tabular-nums',
+                        }}
+                    >
+                        Scanning... found {scanProgress.found} / {scanProgress.total} minted blocks
+                    </p>
+                )}
+
+                {/* Completeness warning */}
+                {!loading && scanProgress && scanProgress.found < scanProgress.total && (
+                    <p
+                        style={{
+                            color: 'var(--accent, #f7931a)',
+                            fontSize: '12px',
+                            marginBottom: 'var(--spacing-md)',
+                            fontVariantNumeric: 'tabular-nums',
+                        }}
+                    >
+                        Showing {scanProgress.found} of {scanProgress.total} minted blocks.
+                        Use search to find specific blocks by height.
+                    </p>
+                )}
+
                 {/* Gallery grid */}
                 <div
                     style={{
@@ -179,9 +204,9 @@ export function GalleryPage(): React.ReactElement {
                         gap: '16px',
                     }}
                 >
-                    {loading ? (
+                    {loading && entries.length === 0 ? (
                         <SkeletonCard count={6} />
-                    ) : entries.length === 0 ? (
+                    ) : entries.length === 0 && !loading ? (
                         <div
                             style={{
                                 gridColumn: '1 / -1',

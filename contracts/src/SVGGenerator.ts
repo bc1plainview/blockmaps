@@ -136,9 +136,7 @@ export function generateSVG(blockHeight: u64, hashU256: u256, txCount: u64): str
                 const rx: u32 = cellSize > 10 ? 3 : 1;
                 svg += "<rect x='" + x.toString() + "' y='" + y.toString() + "' width='" + cellSize.toString() + "' height='" + cellSize.toString() + "' rx='" + rx.toString() + "' fill='" + color + "' opacity='" + opacity + "'/>";
             } else {
-                // Empty cell — dark placeholder
-                const rx: u32 = cellSize > 10 ? 3 : 1;
-                svg += "<rect x='" + x.toString() + "' y='" + y.toString() + "' width='" + cellSize.toString() + "' height='" + cellSize.toString() + "' rx='" + rx.toString() + "' fill='%23ffffff' opacity='0.03'/>";
+                // Empty cell — skip entirely (no transaction to represent)
             }
         }
     }

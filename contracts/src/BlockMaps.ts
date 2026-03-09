@@ -9,11 +9,9 @@ import {
     OP721InitParameters,
     Revert,
     StoredMapU256,
-    StoredString,
     U256_BYTE_LENGTH,
     ADDRESS_BYTE_LENGTH,
 } from '@btc-vision/btc-runtime/runtime';
-import { generateSVG } from './SVGGenerator';
 
 // Storage pointers for BlockMaps-specific data.
 // These are declared at module scope so they are allocated AFTER OP721's internal pointers.
@@ -22,7 +20,6 @@ const blockTxCountPointer: u16 = Blockchain.nextPointer;
 const blockTimestampPointer: u16 = Blockchain.nextPointer;
 const blockDifficultyPointer: u16 = Blockchain.nextPointer;
 const blockMinterPointer: u16 = Blockchain.nextPointer;
-const svgStoragePointer: u16 = Blockchain.nextPointer;
 const blockSizePointer: u16 = Blockchain.nextPointer;
 const blockWeightPointer: u16 = Blockchain.nextPointer;
 const totalFeesPointer: u16 = Blockchain.nextPointer;
@@ -152,12 +149,6 @@ export class BlockMaps extends OP721 {
         this.totalFeesMap.set(tokenId, u256.fromU64(totalFees));
         this.blockRewardMap.set(tokenId, u256.fromU64(blockReward));
 
-        // Generate on-chain SVG and store in custom large-string storage
-        // (bypasses OP721's 200-char MAX_URI_LENGTH by using StoredString directly)
-        const svgDataUri: string = generateSVG(blockHeight, blockHash16, txCount);
-        const svgStore: StoredString = new StoredString(svgStoragePointer, blockHeight);
-        svgStore.value = svgDataUri;
-
         // Mint the OP721 token (reverts if already exists or max supply reached)
         this._mint(minter, tokenId);
 
@@ -249,9 +240,8 @@ export class BlockMaps extends OP721 {
     }
 
     /**
-     * Override tokenURI to serve the on-chain SVG data URI stored during mint.
-     * This bypasses OP721's 200-character MAX_URI_LENGTH limit by reading from
-     * our custom StoredString storage (indexed by blockHeight / tokenId).
+     * Override tokenURI to return a metadata URI.
+     * SVG rendering is handled client-side from stored hash/txCount data.
      */
     public override tokenURI(calldata: Calldata): BytesWriter {
         const tokenId: u256 = calldata.readU256();
@@ -259,12 +249,9 @@ export class BlockMaps extends OP721 {
             throw new Revert('Token does not exist');
         }
 
-        // tokenId == blockHeight (stored as low 64 bits of u256)
         const blockHeight: u64 = tokenId.lo1;
-        const svgStore: StoredString = new StoredString(svgStoragePointer, blockHeight);
-        const uri: string = svgStore.value;
+        const uri: string = 'blockmaps:' + blockHeight.toString();
 
-        // writeStringWithLength uses 4-byte length prefix + UTF-8 content
         const byteLen: i32 = String.UTF8.byteLength(uri);
         const writer = new BytesWriter(4 + byteLen);
         writer.writeStringWithLength(uri);

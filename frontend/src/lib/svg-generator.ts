@@ -75,9 +75,7 @@ export function generateSVG(blockHeight: bigint, hashHex: string, txCount: numbe
                 const rx = cellSize > 10 ? 3 : 1;
                 svg += `<rect x='${x}' y='${y}' width='${cellSize}' height='${cellSize}' rx='${rx}' fill='${color}' opacity='${opacity}'/>`;
             } else {
-                // Empty cell — dark placeholder
-                const rx = cellSize > 10 ? 3 : 1;
-                svg += `<rect x='${x}' y='${y}' width='${cellSize}' height='${cellSize}' rx='${rx}' fill='#ffffff' opacity='0.03'/>`;
+                // Empty cell — no transaction, skip
             }
         }
     }

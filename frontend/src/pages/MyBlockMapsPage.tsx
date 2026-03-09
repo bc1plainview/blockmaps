@@ -1,23 +1,11 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useWalletConnect, SupportedWallets } from '@btc-vision/walletconnect';
 import { BlockMapCard } from '../components/BlockMapCard.js';
 import { SkeletonCard } from '../components/SkeletonCard.js';
-import { useGetBlockData } from '../hooks/useBlockMaps.js';
+import { discoverOwnedBlocks } from '../lib/block-discovery.js';
+import { hash16ToHex } from '../lib/format.js';
 import type { MintedBlockData } from '../types/index.js';
-
-function hash16ToHex(hash16: bigint): string {
-    const hex = hash16.toString(16).padStart(32, '0');
-    return hex.padEnd(64, '0');
-}
-
-// Block heights to probe for ownership. Includes known minted blocks + popular heights.
-// In a full implementation this would use event indexing.
-const KNOWN_HEIGHTS: bigint[] = [
-    111111n,
-    500000n, 630000n, 700000n, 750000n, 800000n, 840000n,
-    550000n, 600000n, 650000n, 680000n, 720000n, 780000n,
-];
 
 interface OwnedEntry {
     blockHeight: bigint;
@@ -27,9 +15,10 @@ interface OwnedEntry {
 export function MyBlockMapsPage(): React.ReactElement {
     const { address, walletAddress, hashedMLDSAKey, connectToWallet } = useWalletConnect();
     const isConnected = address !== null;
-    const { fetchMintedBlockData } = useGetBlockData();
     const [ownedBlocks, setOwnedBlocks] = useState<OwnedEntry[]>([]);
     const [loading, setLoading] = useState(false);
+    const [scanProgress, setScanProgress] = useState<{ found: number; total: number } | null>(null);
+    const cancelledRef = useRef(false);
 
     const ownerKey: string = hashedMLDSAKey ?? '';
 
@@ -37,32 +26,33 @@ export function MyBlockMapsPage(): React.ReactElement {
         if (!ownerKey) return;
         setLoading(true);
         setOwnedBlocks([]);
+        setScanProgress(null);
+        cancelledRef.current = false;
 
-        // Normalize hex: strip 0x prefix, lowercase
-        const strip0x = (s: string): string => s.startsWith('0x') ? s.slice(2).toLowerCase() : s.toLowerCase();
-        const myKey = strip0x(ownerKey);
-
-        const results: OwnedEntry[] = [];
-        for (const height of KNOWN_HEIGHTS) {
-            try {
-                const data = await fetchMintedBlockData(height);
-                if (data && data.hash16 !== 0n && data.owner) {
-                    if (strip0x(data.owner) === myKey) {
-                        results.push({ blockHeight: height, data });
-                    }
+        try {
+            const results = await discoverOwnedBlocks(ownerKey, (found, total) => {
+                if (!cancelledRef.current) {
+                    setScanProgress({ found, total });
                 }
-            } catch {
-                // Not minted or not owned
+            });
+
+            if (!cancelledRef.current) {
+                setOwnedBlocks(results);
+            }
+        } catch {
+            // Discovery failed
+        } finally {
+            if (!cancelledRef.current) {
+                setLoading(false);
             }
         }
-        setOwnedBlocks(results);
-        setLoading(false);
-    }, [ownerKey, fetchMintedBlockData]);
+    }, [ownerKey]);
 
     useEffect(() => {
         if (isConnected && ownerKey) {
             void loadOwnedBlocks();
         }
+        return (): void => { cancelledRef.current = true; };
     }, [isConnected, ownerKey, loadOwnedBlocks]);
 
     const handleConnect = useCallback((): void => {
@@ -125,7 +115,21 @@ export function MyBlockMapsPage(): React.ReactElement {
                     </Link>
                 </div>
 
-                {loading ? (
+                {/* Scan progress */}
+                {loading && scanProgress && (
+                    <p
+                        style={{
+                            color: 'var(--text-muted)',
+                            fontSize: '12px',
+                            marginBottom: 'var(--spacing-md)',
+                            fontVariantNumeric: 'tabular-nums',
+                        }}
+                    >
+                        Scanning... checked {scanProgress.found} / {scanProgress.total} minted blocks
+                    </p>
+                )}
+
+                {loading && !scanProgress ? (
                     <div
                         style={{
                             display: 'grid',
@@ -135,7 +139,7 @@ export function MyBlockMapsPage(): React.ReactElement {
                     >
                         <SkeletonCard count={4} />
                     </div>
-                ) : ownedBlocks.length === 0 ? (
+                ) : !loading && ownedBlocks.length === 0 ? (
                     <div
                         style={{
                             textAlign: 'center',
@@ -149,7 +153,7 @@ export function MyBlockMapsPage(): React.ReactElement {
                             Mint Your First Block
                         </Link>
                     </div>
-                ) : (
+                ) : !loading ? (
                     <>
                         <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginBottom: 'var(--spacing-lg)', fontVariantNumeric: 'tabular-nums' }}>
                             {ownedBlocks.length} BlockMap{ownedBlocks.length !== 1 ? 's' : ''} found
@@ -173,7 +177,7 @@ export function MyBlockMapsPage(): React.ReactElement {
                             ))}
                         </div>
                     </>
-                )}
+                ) : null}
             </div>
         </div>
     );

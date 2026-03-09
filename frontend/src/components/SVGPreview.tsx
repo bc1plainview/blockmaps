@@ -1,28 +1,5 @@
 import React from 'react';
-
-const PALETTE: readonly string[] = [
-    '#f7931a', '#ffcc00', '#ff6b00', '#ffa940',
-    '#e8821a', '#ffdd44', '#cc5500', '#ffb732',
-    '#ff8c00', '#f5a623', '#e67300', '#ffc93c',
-    '#d4760a', '#ffaa00', '#b35c00', '#ffe066',
-];
-
-function opacityStr(byteVal: number): string {
-    const scaled = 40 + Math.floor(byteVal * 60 / 255);
-    if (scaled >= 100) return '1';
-    const tens = Math.floor(scaled / 10);
-    const ones = scaled % 10;
-    return `0.${tens}${ones}`;
-}
-
-function hashToBytes(hashHex: string): number[] {
-    const hexStr = hashHex.startsWith('0x') ? hashHex.slice(2) : hashHex;
-    const bytes: number[] = [];
-    for (let i = 0; i < 32; i += 2) {
-        bytes.push(parseInt(hexStr.substring(i, i + 2), 16));
-    }
-    return bytes;
-}
+import { hashToBytes, previewCellColor, gridDimForTxCount } from '../lib/grid-colors.js';
 
 interface SVGPreviewProps {
     blockHeight: bigint;
@@ -33,16 +10,19 @@ interface SVGPreviewProps {
 }
 
 /**
- * Always renders a 16x16 grid preview matching the InteractiveGrid look.
- * Filled cells = min(txCount, 256), rest are dark placeholders.
+ * Renders a grid preview using the same weight-based heat palette as the detail page.
+ * Uses simulated weight distribution when no real tx data is available.
+ * Empty cells (beyond actual tx count) are not rendered.
  */
 export function SVGPreview({ blockHeight, hashHex, txCount = 256, size = 280, className = '' }: SVGPreviewProps): React.ReactElement {
-    const gridDim = 16;
+    const gridDim = gridDimForTxCount(txCount);
     const viewBox = 280;
-    const gap = 1;
+    const gap = gridDim <= 16 ? 1 : 0;
     const totalGap = (gridDim - 1) * gap;
-    const cellSize = Math.floor((viewBox - totalGap) / gridDim);
-    const filledCells = Math.min(Math.max(txCount, 1), 256);
+    const cellSize = (viewBox - totalGap) / gridDim;
+    const totalCells = gridDim * gridDim;
+    const txsPerCell = Math.max(1, Math.ceil(txCount / totalCells));
+    const filledCells = Math.min(totalCells, Math.ceil(txCount / txsPerCell));
     const hashBytes = hashToBytes(hashHex);
 
     const cells: React.ReactElement[] = [];
@@ -50,41 +30,27 @@ export function SVGPreview({ blockHeight, hashHex, txCount = 256, size = 280, cl
     for (let row = 0; row < gridDim; row++) {
         for (let col = 0; col < gridDim; col++) {
             const cellIndex = row * gridDim + col;
+            if (cellIndex >= filledCells) continue; // empty — skip entirely
+
             const x = col * (cellSize + gap);
             const y = row * (cellSize + gap);
 
-            if (cellIndex < filledCells) {
-                const hashIdx = cellIndex % 16;
-                const byteVal = hashBytes[hashIdx] ?? 0;
-                const colorByte = (byteVal + cellIndex) & 0xff;
-                const color = PALETTE[colorByte & 0x0f] ?? PALETTE[0];
-                const opacity = opacityStr(byteVal);
-                cells.push(
-                    <rect
-                        key={cellIndex}
-                        x={x}
-                        y={y}
-                        width={cellSize}
-                        height={cellSize}
-                        rx={0}
-                        fill={color}
-                        opacity={opacity}
-                    />,
-                );
-            } else {
-                cells.push(
-                    <rect
-                        key={cellIndex}
-                        x={x}
-                        y={y}
-                        width={cellSize}
-                        height={cellSize}
-                        rx={0}
-                        fill="#ffffff"
-                        opacity="0.025"
-                    />,
-                );
-            }
+            const { color, opacity } = previewCellColor(
+                hashBytes, cellIndex, txCount, totalCells, [], { min: 1, max: 100 },
+            );
+
+            cells.push(
+                <rect
+                    key={cellIndex}
+                    x={x}
+                    y={y}
+                    width={cellSize}
+                    height={cellSize}
+                    rx={0}
+                    fill={color}
+                    opacity={opacity}
+                />,
+            );
         }
     }
 
@@ -98,7 +64,7 @@ export function SVGPreview({ blockHeight, hashHex, txCount = 256, size = 280, cl
             aria-label={`BlockMap #${blockHeight.toString()}`}
             role="img"
         >
-            <rect width={viewBox} height={viewBox} fill="#050510" rx="0" />
+            <rect width={viewBox} height={viewBox} fill="#020208" rx="0" />
             <g>{cells}</g>
         </svg>
     );
